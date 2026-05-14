@@ -22,3 +22,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Cache
+.vite
+vite.config.js.timestamp-*
+
+# OS
+Thumbs.db
+
+# Tools
+AGENTS.md
+.omc
+CLAUDE.md

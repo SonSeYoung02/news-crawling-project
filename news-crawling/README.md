@@ -1,0 +1,257 @@
+# 한국어 뉴스 크롤링 + LLM 분석 파이프라인
+
+네이버뉴스, 조선일보, 중앙일보, 한겨레에서 뉴스를 수집하고 Gemini AI로 요약·분류하여 SQLite에 저장하는 파이프라인입니다.
+
+---
+
+## 목차
+
+- [구조](#구조)
+- [동작 로직](#동작-로직)
+- [설치](#설치)
+- [설정](#설정)
+- [사용법](#사용법)
+- [DB 확인](#db-확인)
+
+---
+
+## 구조
+
+```
+news-crawling/
+├── main.py              # 진입점 (CLI)
+├── config.py            # 환경 설정 (API 키, DB 경로, 스케줄 등)
+├── db.py                # SQLite 연결 및 저장 로직
+├── crawlers/
+│   ├── __init__.py      # 전체 소스 통합 (get_all_articles)
+│   ├── naver.py         # 네이버뉴스 크롤러 (HTML 파싱)
+│   ├── chosun.py        # 조선일보 크롤러 (RSS)
+│   ├── joongang.py      # 중앙일보 크롤러 (RSS)
+│   ├── hankyoreh.py     # 한겨레 크롤러 (RSS)
+│   └── _rss.py          # RSS 공통 파서
+├── llm/
+│   └── analyzer.py      # Gemini API 요약·분류
+├── news.db              # SQLite DB (실행 후 생성)
+├── pipeline.log         # 실행 로그 (실행 후 생성)
+└── requirements.txt
+```
+
+---
+
+## 동작 로직
+
+```
+┌─────────────────────────────────────────────┐
+│                  main.py                    │
+│                run_pipeline()               │
+└──────────────────┬──────────────────────────┘
+                   │
+         ① 뉴스 수집 (크롤링)
+                   │
+    ┌──────────────▼──────────────┐
+    │      crawlers/__init__.py   │
+    │       get_all_articles()    │
+    └─┬────────┬────────┬────────┬┘
+      │        │        │        │
+  네이버    조선일보  중앙일보  한겨레
+  (HTML)    (RSS)    (RSS)    (RSS)
+      │        │        │        │
+      └────────┴────────┴────────┘
+                   │
+                   │ articles[]
+                   │
+         ② 중복 필터링
+                   │
+    ┌──────────────▼──────────────┐
+    │           db.py             │
+    │       is_duplicate(url)     │
+    └──────────────┬──────────────┘
+                   │ 신규 기사만
+                   │
+         ③ LLM 분석 (기사별)
+                   │
+    ┌──────────────▼──────────────┐
+    │       llm/analyzer.py       │
+    │  summarize()  classify()    │
+    │    (Gemini 2.5 Flash)       │
+    └──────────────┬──────────────┘
+                   │ summary, major_category,
+                   │ sub_category, tags
+                   │
+         ④ DB 저장
+                   │
+    ┌──────────────▼──────────────┐
+    │           db.py             │
+    │    save_articles_batch()    │
+    │         news.db             │
+    └─────────────────────────────┘
+```
+
+### 크롤러별 동작 방식
+
+| 소스 | 방식 | 수집 기준 |
+|------|------|-----------|
+| 네이버뉴스 | HTML 파싱 | IT/경제/정치/사회/연예/국제 섹션별 최대 5건 |
+| 조선일보 | RSS 파싱 | 피드 최신 10건 |
+| 중앙일보 | RSS 파싱 | 피드 최신 10건 |
+| 한겨레 | RSS 파싱 | 피드 최신 10건 |
+
+### LLM 분석 내용
+
+- **요약**: 기사 본문을 3~5문장으로 요약 (본문 최대 3,000자 사용)
+- **대분류**: IT / 경제 / 정치 / 사회 / 스포츠 / 연예 / 국제
+- **중분류**: 세부 주제 (예: 반도체, 주식시장, 대선)
+- **태그**: 키워드 최대 10개
+
+### DB 스키마 (`articles` 테이블)
+
+| 컬럼 | 설명 |
+|------|------|
+| `id` | 자동 증가 PK |
+| `url` | 기사 URL (UNIQUE) |
+| `source` | 언론사 이름 |
+| `title` | 기사 제목 |
+| `content` | 기사 본문 |
+| `published_at` | 기사 발행일 |
+| `crawled_at` | 수집 시각 |
+| `summary` | LLM 요약 |
+| `major_category` | 대분류 |
+| `sub_category` | 중분류 |
+| `tags` | 태그 (JSON 배열) |
+
+---
+
+## 설치
+
+```bash
+# 1. 가상환경 생성 및 활성화
+python -m venv venv
+venv\Scripts\activate        # Windows
+# source venv/bin/activate   # macOS/Linux
+
+# 2. 의존성 설치
+pip install -r requirements.txt
+```
+
+### 의존성
+
+| 패키지 | 용도 |
+|--------|------|
+| `httpx` | HTTP 요청 |
+| `beautifulsoup4` + `lxml` | HTML/XML 파싱 |
+| `APScheduler` | 정기 스케줄 실행 |
+| `google-genai` | Gemini API 클라이언트 |
+
+---
+
+## 설정
+
+### 필수: Gemini API 키
+
+[Google AI Studio](https://aistudio.google.com)에서 발급 후 환경 변수로 설정합니다.
+
+```powershell
+# Windows PowerShell (세션 한정)
+$env:GEMINI_API_KEY = "your-api-key-here"
+
+# 영구 설정
+[System.Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "your-api-key-here", "User")
+```
+
+### 선택: `config.py` 수정
+
+```python
+SCHEDULE_HOUR   = 8     # 스케줄러 실행 시각 (시)
+SCHEDULE_MINUTE = 0     # 스케줄러 실행 시각 (분)
+GEMINI_MODEL    = "gemini-2.5-flash"   # 사용할 Gemini 모델
+REQUEST_TIMEOUT = 10    # HTTP 요청 타임아웃 (초)
+```
+
+---
+
+## 사용법
+
+### 1회 즉시 실행
+
+```bash
+python main.py --run
+```
+
+실행 흐름이 콘솔과 `pipeline.log`에 출력됩니다.
+
+```
+2026-05-14 08:00:00 [INFO] __main__: === 파이프라인 시작 ===
+2026-05-14 08:00:05 [INFO] __main__: 총 35건 수집 완료
+2026-05-14 08:00:06 [INFO] __main__: 분석 중: 삼성전자 2분기 실적 발표...
+...
+2026-05-14 08:01:30 [INFO] __main__: === 파이프라인 완료 | 수집: 35 | 중복: 5 | 저장: 30 ===
+```
+
+### 매일 자동 실행 (스케줄러)
+
+```bash
+python main.py --schedule
+```
+
+`config.py`의 `SCHEDULE_HOUR`/`SCHEDULE_MINUTE` 시각에 매일 자동 실행됩니다. 종료는 `Ctrl+C`.
+
+### 크롤러만 단독 테스트 (API 키 없이)
+
+```bash
+python -c "from crawlers import get_all_articles; arts = get_all_articles(); print(f'{len(arts)}건 수집')"
+```
+
+---
+
+## DB 확인
+
+### Python으로 조회
+
+```python
+import sqlite3, json
+
+conn = sqlite3.connect("news.db")
+conn.row_factory = sqlite3.Row
+
+# 최근 10건 조회
+rows = conn.execute("""
+    SELECT id, source, title, major_category, sub_category, crawled_at
+    FROM articles
+    ORDER BY id DESC
+    LIMIT 10
+""").fetchall()
+
+for r in rows:
+    print(dict(r))
+
+conn.close()
+```
+
+### SQLite CLI
+
+```bash
+sqlite3 news.db
+```
+```sql
+.headers on
+.mode column
+
+-- 전체 건수
+SELECT COUNT(*) FROM articles;
+
+-- 언론사별 건수
+SELECT source, COUNT(*) FROM articles GROUP BY source;
+
+-- 최근 기사 조회
+SELECT id, source, title, major_category FROM articles ORDER BY id DESC LIMIT 10;
+
+-- 태그 포함 조회
+SELECT title, tags FROM articles WHERE major_category = 'IT' LIMIT 5;
+
+.quit
+```
+
+### GUI 툴
+
+- **DB Browser for SQLite**: https://sqlitebrowser.org (무료)
+- **VS Code 확장**: `SQLite Viewer` 설치 후 `news.db` 파일 직접 열기
