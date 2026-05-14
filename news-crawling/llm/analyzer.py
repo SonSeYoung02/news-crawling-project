@@ -6,12 +6,27 @@ from config import GEMINI_API_KEY, GEMINI_MODEL, MAJOR_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
-_SUMMARY_PROMPT = """다음 뉴스 기사를 한국어로 3~5문장으로 요약해주세요. 핵심 내용만 간결하게 작성하세요.
+_SUMMARY_PROMPT = """다음 뉴스 기사를 한국어로 3~5문장으로 요약해주세요.
+기사가 외국어이면 먼저 한국어로 이해한 뒤, 핵심 내용만 자연스러운 한국어로 간결하게 작성하세요.
 
 기사:
 {content}
 
 요약:"""
+
+_TRANSLATE_ARTICLE_PROMPT = """다음 뉴스 기사의 제목과 본문을 자연스러운 한국어로 번역해주세요.
+원문이 이미 한국어이면 의미를 유지하면서 어색한 표현만 다듬어주세요.
+요약하지 말고 원문 정보를 유지하세요.
+
+기사 제목: {title}
+기사 본문:
+{content}
+
+아래 JSON 형식으로만 응답하세요 (다른 텍스트 없이):
+{{
+  "title": "<한국어 제목>",
+  "content": "<한국어 본문>"
+}}"""
 
 _CLASSIFY_PROMPT = """다음 뉴스 기사를 분류해주세요.
 
@@ -55,11 +70,49 @@ def _call_gemini(prompt: str) -> Optional[str]:
 
 
 def summarize(text: str) -> str:
-    if not text or len(text) < 50:
+    if not text or len(text) < 20:
         return ""
     content = text[:3000]
     result = _call_gemini(_SUMMARY_PROMPT.format(content=content))
     return result or ""
+
+
+def translate_article_to_korean(title: str, content: str) -> Optional[dict[str, str]]:
+    source_text = content if content and len(content) >= 20 else title
+    if not source_text:
+        return None
+    raw = _call_gemini(_TRANSLATE_ARTICLE_PROMPT.format(
+        title=title,
+        content=source_text[:5000],
+    ))
+    if not raw:
+        return None
+
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start == -1 or end == 0:
+        logger.warning("LLM 번역 응답 파싱 실패: %s", raw[:200])
+        return None
+
+    try:
+        result = json.loads(raw[start:end])
+    except json.JSONDecodeError as e:
+        logger.warning("LLM 번역 JSON 파싱 실패: %s | raw=%s", e, raw[:200])
+        return None
+
+    translated_title = str(result.get("title") or title).strip()
+    translated_content = str(result.get("content") or "").strip()
+    if not translated_content:
+        return None
+    return {
+        "title": translated_title,
+        "content": translated_content,
+    }
+
+
+def translate_to_korean(title: str, content: str) -> str:
+    result = translate_article_to_korean(title, content)
+    return result["content"] if result else ""
 
 
 def classify(title: str, content: str) -> dict:

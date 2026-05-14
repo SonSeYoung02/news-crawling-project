@@ -46,6 +46,64 @@ def is_duplicate(url: str) -> bool:
         return row is not None
 
 
+def get_article_by_url(url: str) -> Optional[dict]:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM articles WHERE url = ?", (url,)).fetchone()
+        return dict(row) if row else None
+
+
+def update_article_translation(article: dict) -> bool:
+    with _connect() as conn:
+        conn.execute(
+            """
+            UPDATE articles
+            SET title = ?, content = ?, summary = ?, major_category = ?, sub_category = ?, tags = ?, crawled_at = ?
+            WHERE url = ?
+            """,
+            (
+                article.get("title", ""),
+                article.get("content", ""),
+                article.get("summary"),
+                article.get("major_category"),
+                article.get("sub_category"),
+                json.dumps(article.get("tags", []), ensure_ascii=False),
+                article.get("crawled_at", datetime.now().isoformat()),
+                article["url"],
+            ),
+        )
+        conn.commit()
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def update_content_if_empty(article: dict) -> bool:
+    content = article.get("content", "")
+    if not content:
+        return False
+
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT content FROM articles WHERE url = ?",
+            (article["url"],),
+        ).fetchone()
+        if not row or row["content"]:
+            return False
+
+        conn.execute(
+            """
+            UPDATE articles
+            SET content = ?, crawled_at = ?
+            WHERE url = ?
+            """,
+            (
+                content,
+                article.get("crawled_at", datetime.now().isoformat()),
+                article["url"],
+            ),
+        )
+        conn.commit()
+        return conn.execute("SELECT changes()").fetchone()[0] > 0
+
+
 def save_article(article: dict) -> bool:
     """Returns True if saved, False if duplicate."""
     tags = article.get("tags", [])

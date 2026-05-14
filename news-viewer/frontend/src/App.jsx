@@ -8,6 +8,15 @@ const ACCENT_MID = "#8b5cf6";
 const BORDER = "#e5e7eb";
 const TEXT_SECONDARY = "#6b7280";
 const TEXT_MUTED = "#9ca3af";
+const CATEGORY_FILTERS = ["경제", "IT", "기타"];
+const SOURCE_FILTERS = ["네이버뉴스", "조선일보", "한겨레", "Google News", "arXiv", "dev.to"];
+
+const cleanArticleText = (text = "") =>
+  text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.includes("\uad11\uace0"))
+    .join("\n");
 
 const s = {
   layout: {
@@ -318,7 +327,27 @@ export default function App() {
       .finally(() => setLoading(false));
   }, [page, selectedCategory, selectedSource, search]);
 
+  useEffect(() => {
+    if (!loading && !selected && articles.length > 0) {
+      setSelected(articles[0]);
+    }
+  }, [articles, loading, selected]);
+
   const totalPages = Math.ceil(total / SIZE);
+  const categoryItems = [
+    { major_category: "", count: total },
+    ...CATEGORY_FILTERS.map((category) => ({
+      major_category: category,
+      count: categories.find((c) => c.major_category === category)?.count ?? 0,
+    })),
+  ];
+  const sourceItems = [
+    { source: "", count: total },
+    ...SOURCE_FILTERS.map((source) => ({
+      source,
+      count: sources.find((item) => item.source === source)?.count ?? 0,
+    })),
+  ];
 
   const handleCategoryClick = (cat) => {
     setSelectedCategory(cat);
@@ -342,7 +371,7 @@ export default function App() {
         </div>
         <div style={s.sidebarScroll}>
           <div style={{ ...s.sectionLabel, marginTop: 4 }}>카테고리</div>
-          {[{ major_category: "", count: total }, ...categories].map((c) => (
+          {categoryItems.map((c) => (
             <div
               key={c.major_category}
               onClick={() => handleCategoryClick(c.major_category)}
@@ -354,7 +383,7 @@ export default function App() {
           ))}
 
           <div style={s.sectionLabel}>출처</div>
-          {[{ source: "", count: total }, ...sources].map((src) => (
+          {sourceItems.map((src) => (
             <div
               key={src.source}
               onClick={() => handleSourceClick(src.source)}
@@ -447,7 +476,6 @@ export default function App() {
           <div style={s.detailPanel}>
             {!selected ? (
               <div style={s.detailEmpty}>
-                <span style={s.detailEmptyIcon}>📄</span>
                 <span style={{ fontSize: 14 }}>기사를 선택하세요</span>
               </div>
             ) : (
@@ -481,7 +509,9 @@ export default function App() {
                     <div style={s.summaryText}>{selected.summary}</div>
                   </div>
                 )}
-                <div style={s.detailContent}>{selected.content}</div>
+                <div style={s.detailContent}>
+                  {cleanArticleText(selected.content) || "이 기사는 원문 본문을 가져오지 못했습니다."}
+                </div>
                 {(selected.tags || []).length > 0 && (
                   <div style={s.tagRow}>
                     {(selected.tags || []).map((t) => (

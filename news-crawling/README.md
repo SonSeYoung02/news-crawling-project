@@ -1,6 +1,6 @@
 # 한국어 뉴스 크롤링 + LLM 분석 파이프라인
 
-네이버뉴스, 조선일보, 중앙일보, 한겨레에서 뉴스를 수집하고 Gemini AI로 요약·분류하여 SQLite에 저장하는 파이프라인입니다.
+네이버뉴스, 조선일보, 한겨레, Google News, arXiv, dev.to에서 뉴스를 수집하고 Gemini AI로 요약·분류하여 SQLite에 저장하는 파이프라인입니다.
 
 ---
 
@@ -26,7 +26,9 @@ news-crawling/
 │   ├── __init__.py      # 전체 소스 통합 (get_all_articles)
 │   ├── naver.py         # 네이버뉴스 크롤러 (HTML 파싱)
 │   ├── chosun.py        # 조선일보 크롤러 (RSS)
-│   ├── joongang.py      # 중앙일보 크롤러 (RSS)
+│   ├── google_news.py   # Google News 외국 뉴스 크롤러 (RSS)
+│   ├── arxiv.py         # arXiv API 크롤러
+│   ├── devto.py         # dev.to API 크롤러
 │   ├── hankyoreh.py     # 한겨레 크롤러 (RSS)
 │   └── _rss.py          # RSS 공통 파서
 ├── llm/
@@ -53,10 +55,10 @@ news-crawling/
     │       get_all_articles()    │
     └─┬────────┬────────┬────────┬┘
       │        │        │        │
-  네이버    조선일보  중앙일보  한겨레
-  (HTML)    (RSS)    (RSS)    (RSS)
-      │        │        │        │
-      └────────┴────────┴────────┘
+  네이버    조선일보    한겨레   Google News   arXiv   dev.to
+  (HTML)    (RSS)      (RSS)      (RSS)      (API)   (API)
+      │        │        │          │          │       │
+      └────────┴────────┴──────────┴──────────┴───────┘
                    │
                    │ articles[]
                    │
@@ -93,8 +95,10 @@ news-crawling/
 |------|------|-----------|
 | 네이버뉴스 | HTML 파싱 | IT/경제/정치/사회/연예/국제 섹션별 최대 5건 |
 | 조선일보 | RSS 파싱 | 피드 최신 10건 |
-| 중앙일보 | RSS 파싱 | 피드 최신 10건 |
 | 한겨레 | RSS 파싱 | 피드 최신 10건 |
+| Google News | RSS 파싱 | 경제/IT 검색 피드별 최신 10건 |
+| arXiv | Atom API 파싱 | 지정 논문 ID |
+| dev.to | JSON API 파싱 | AI 태그 인기 글 최신 10건 |
 
 ### LLM 분석 내용
 
