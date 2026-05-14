@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Runtime artifacts
+news.db
+pipeline.log
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# OMC / agent state
+.omc/
+.claude/
+
+# AI agent documentation (auto-generated)
+AGENTS.md
+**/AGENTS.md
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+CLAUDE.md
