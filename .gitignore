@@ -1,3 +1,6 @@
+.omc
+.vscode
+
 # Python
 __pycache__/
 *.py[cod]
@@ -5,9 +8,6 @@ __pycache__/
 *.pyd
 *.egg
 *.egg-info/
-dist/
-build/
-.eggs/
 
 # Virtual environments
 venv/
@@ -20,16 +20,14 @@ env/
 .env.local
 .env.*.local
 
-# IDE
-.vscode/
-.idea/
-*.suo
-*.user
-
 # Runtime artifacts
-news.db
-pipeline.log
+*.db
 *.log
+
+# Node
+node_modules/
+dist/
+dist-ssr/
 
 # OS
 .DS_Store
@@ -43,9 +41,5 @@ desktop.ini
 # AI agent documentation (auto-generated)
 AGENTS.md
 **/AGENTS.md
-
-# pytest / coverage
-.pytest_cache/
-.coverage
-htmlcov/
 CLAUDE.md
+**/CLAUDE.md

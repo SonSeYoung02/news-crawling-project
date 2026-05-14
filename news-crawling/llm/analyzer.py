@@ -32,20 +32,22 @@ def _get_client():
     global _client
     if _client is None:
         try:
-            import google.generativeai as genai
+            from google import genai
         except ImportError:
-            raise ImportError("google-generativeai 패키지가 없습니다: pip install google-generativeai")
+            raise ImportError("google-genai 패키지가 없습니다: pip install google-genai")
         if not GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY 환경 변수를 설정해주세요.")
-        genai.configure(api_key=GEMINI_API_KEY)
-        _client = genai.GenerativeModel(GEMINI_MODEL)
+        _client = genai.Client(api_key=GEMINI_API_KEY)
     return _client
 
 
 def _call_gemini(prompt: str) -> Optional[str]:
     try:
-        model = _get_client()
-        response = model.generate_content(prompt)
+        client = _get_client()
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+        )
         return response.text.strip()
     except Exception as e:
         logger.error("Gemini 호출 실패: %s", e)

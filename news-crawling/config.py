@@ -4,7 +4,7 @@ from pathlib import Path
 DB_PATH = Path(__file__).parent / "news.db"
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 MAJOR_CATEGORIES = ["IT", "경제", "정치", "사회", "스포츠", "연예", "국제"]
 
