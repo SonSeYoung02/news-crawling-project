@@ -505,7 +505,7 @@ export default function App() {
                 </div>
                 {selected.summary && (
                   <div style={s.summaryBox}>
-                    <div style={s.summaryLabel}>AI 요약</div>
+                    <div style={s.summaryLabel}>LLM 분석</div>
                     <div style={s.summaryText}>{selected.summary}</div>
                   </div>
                 )}
