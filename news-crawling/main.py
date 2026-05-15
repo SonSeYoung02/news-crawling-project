@@ -27,10 +27,11 @@ def run_pipeline() -> None:
     from crawlers import get_all_articles
     from db import (
         get_article_by_url,
+        get_article_id_by_url,
         init_db,
         is_duplicate,
-        save_articles_batch,
-        update_article_translation,
+        save_analysis,
+        save_article,
         update_content_if_empty,
     )
     from llm.analyzer import classify, summarize, translate_article_to_korean
@@ -43,61 +44,42 @@ def run_pipeline() -> None:
     articles = get_all_articles()
     logger.info("총 %d건 수집 완료", len(articles))
 
-    # 2. 중복 필터링 + LLM 분석
-    processed: list[dict] = []
-    skipped_dup = 0
-    skipped_translation = 0
-    updated_translation = 0
+    saved = skipped_dup = skipped_translation = 0
+
     for article in articles:
-        if is_duplicate(article["url"]):
-            existing = get_article_by_url(article["url"])
-            existing_text = f"{existing.get('title', '')}\n{existing.get('content', '')}" if existing else ""
-            if article.get("translate_to_korean") and not _has_korean(existing_text):
-                logger.info("기존 외국어 기사 한국어 갱신 중: %s", _safe_log_text(article["title"][:40]))
-                translated = translate_article_to_korean(
-                    article.get("title", ""),
-                    article.get("content", ""),
-                )
-                if translated:
-                    article["title"] = translated["title"]
-                    article["content"] = translated["content"]
-                    summary = summarize(article.get("content", ""))
-                    classification = classify(article.get("title", ""), article.get("content", ""))
-                    if classification["major_category"] == "기타" and article.get("major_category"):
-                        classification["major_category"] = article["major_category"]
-                    if not classification["sub_category"] and article.get("sub_category"):
-                        classification["sub_category"] = article["sub_category"]
-                    if not classification["tags"] and article.get("tags"):
-                        classification["tags"] = article["tags"]
-                    article.update({
-                        "summary": summary,
-                        "major_category": classification["major_category"],
-                        "sub_category": classification["sub_category"],
-                        "tags": classification["tags"],
-                    })
-                    if update_article_translation(article):
-                        updated_translation += 1
-                else:
-                    skipped_translation += 1
-            update_content_if_empty(article)
-            skipped_dup += 1
-            continue
-
-        logger.info("분석 중: %s", _safe_log_text(article["title"][:40]))
-
+        # 2. 번역 (실패해도 원문으로 계속 진행)
         if article.get("translate_to_korean"):
             translated = translate_article_to_korean(
                 article.get("title", ""),
                 article.get("content", ""),
             )
-            if not translated:
+            if translated:
+                article["title"] = translated["title"]
+                article["content"] = translated["content"]
+            else:
                 skipped_translation += 1
-                logger.warning("한국어 변환 실패로 저장 건너뜀: %s", _safe_log_text(article["title"][:40]))
-                continue
-            article["title"] = translated["title"]
-            article["content"] = translated["content"]
+                logger.warning(
+                    "번역 실패, 원문으로 저장: %s",
+                    _safe_log_text(article["title"][:40]),
+                )
 
+        # 3. articles 테이블에 저장
+        if is_duplicate(article["url"]):
+            update_content_if_empty(article)
+            skipped_dup += 1
+            continue
+
+        if not save_article(article):
+            skipped_dup += 1
+            continue
+
+        saved += 1
+        logger.info("저장: %s", _safe_log_text(article["title"][:40]))
+
+        # 4. LLM 요약
         summary = summarize(article.get("content", ""))
+
+        # 5. LLM 분류
         classification = classify(article.get("title", ""), article.get("content", ""))
         if classification["major_category"] == "기타" and article.get("major_category"):
             classification["major_category"] = article["major_category"]
@@ -106,19 +88,20 @@ def run_pipeline() -> None:
         if not classification["tags"] and article.get("tags"):
             classification["tags"] = article["tags"]
 
-        article.update({
-            "summary": summary,
-            "major_category": classification["major_category"],
-            "sub_category": classification["sub_category"],
-            "tags": classification["tags"],
-        })
-        processed.append(article)
+        # 6. article_analysis 테이블에 저장
+        article_id = get_article_id_by_url(article["url"])
+        if article_id:
+            save_analysis(
+                article_id=article_id,
+                summary=summary,
+                major_category=classification["major_category"],
+                sub_category=classification.get("sub_category", ""),
+                tags=classification.get("tags", []),
+            )
 
-    # 3. 저장
-    saved, skipped_save = save_articles_batch(processed)
     logger.info(
-        "=== 파이프라인 완료 | 수집: %d | 중복 건너뜀: %d | 번역 갱신: %d | 번역 실패: %d | 저장: %d | 저장 중복: %d ===",
-        len(articles), skipped_dup, updated_translation, skipped_translation, saved, skipped_save,
+        "=== 파이프라인 완료 | 수집: %d | 저장: %d | 중복 건너뜀: %d | 번역 실패: %d ===",
+        len(articles), saved, skipped_dup, skipped_translation,
     )
 
 
