@@ -10,7 +10,13 @@ from config import CRAWL_HEADERS
 
 logger = logging.getLogger(__name__)
 
-_API_URL = "https://export.arxiv.org/api/query?id_list=2604.02022"
+_API_URL = (
+    "https://export.arxiv.org/api/query"
+    "?search_query=cat:cs.AI"
+    "&sortBy=submittedDate"
+    "&sortOrder=descending"
+    "&max_results=10"
+)
 _TIMEOUT = 30
 _HEADERS = {
     **CRAWL_HEADERS,
