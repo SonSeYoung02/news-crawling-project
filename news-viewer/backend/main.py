@@ -167,21 +167,37 @@ def get_articles(
     params: list = []
 
     if category:
-        conditions.append("major_category = ?")
+        conditions.append("COALESCE(aa.major_category, a.major_category) = ?")
         params.append(category)
     if source:
-        conditions.append("source = ?")
+        conditions.append("a.source = ?")
         params.append(source)
     if q:
-        conditions.append("(title LIKE ? OR summary LIKE ?)")
+        conditions.append("(a.title LIKE ? OR COALESCE(aa.summary, a.summary) LIKE ?)")
         params.extend([f"%{q}%", f"%{q}%"])
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
+    base_query = f"""
+        FROM articles a
+        LEFT JOIN article_analysis aa ON aa.article_id = a.id
+        {where}
+    """
+
     with _connect() as conn:
-        total = conn.execute(f"SELECT COUNT(*) FROM articles {where}", params).fetchone()[0]
+        total = conn.execute(f"SELECT COUNT(*) {base_query}", params).fetchone()[0]
         rows = conn.execute(
-            f"SELECT * FROM articles {where} ORDER BY crawled_at DESC LIMIT ? OFFSET ?",
+            f"""
+            SELECT
+                a.id, a.url, a.source, a.title, a.content,
+                a.published_at, a.crawled_at,
+                COALESCE(aa.summary, a.summary) AS summary,
+                COALESCE(aa.major_category, a.major_category) AS major_category,
+                COALESCE(aa.sub_category, a.sub_category) AS sub_category,
+                COALESCE(aa.tags, a.tags) AS tags
+            {base_query}
+            ORDER BY a.crawled_at DESC LIMIT ? OFFSET ?
+            """,
             params + [size, offset],
         ).fetchall()
 
@@ -196,7 +212,21 @@ def get_articles(
 @app.get("/articles/{article_id}")
 def get_article(article_id: int):
     with _connect() as conn:
-        row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
+        row = conn.execute(
+            """
+            SELECT
+                a.id, a.url, a.source, a.title, a.content,
+                a.published_at, a.crawled_at,
+                COALESCE(aa.summary, a.summary) AS summary,
+                COALESCE(aa.major_category, a.major_category) AS major_category,
+                COALESCE(aa.sub_category, a.sub_category) AS sub_category,
+                COALESCE(aa.tags, a.tags) AS tags
+            FROM articles a
+            LEFT JOIN article_analysis aa ON aa.article_id = a.id
+            WHERE a.id = ?
+            """,
+            (article_id,),
+        ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Article not found")
     return _row_to_dict(row)
@@ -206,7 +236,15 @@ def get_article(article_id: int):
 def get_categories():
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT major_category, COUNT(*) as count FROM articles GROUP BY major_category ORDER BY count DESC"
+            """
+            SELECT COALESCE(aa.major_category, a.major_category) AS major_category,
+                   COUNT(*) as count
+            FROM articles a
+            LEFT JOIN article_analysis aa ON aa.article_id = a.id
+            WHERE COALESCE(aa.major_category, a.major_category) IS NOT NULL
+            GROUP BY COALESCE(aa.major_category, a.major_category)
+            ORDER BY count DESC
+            """
         ).fetchall()
     return [dict(r) for r in rows]
 
