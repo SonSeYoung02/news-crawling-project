@@ -26,28 +26,46 @@ def fetch() -> list[dict[str, Any]]:
         return []
 
     articles = []
-    for item in payload:
-        title = item.get("title", "")
-        url = item.get("url") or item.get("canonical_url")
-        if not title or not url:
-            continue
+    with httpx.Client(headers=CRAWL_HEADERS, timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+        for item in payload:
+            title = item.get("title", "")
+            url = item.get("url") or item.get("canonical_url")
+            if not title or not url:
+                continue
 
-        articles.append({
-            "url": url,
-            "source": "dev.to",
-            "title": title,
-            "content": _content(item),
-            "published_at": item.get("published_at") or datetime.now().isoformat(),
-            "crawled_at": datetime.now().isoformat(),
-            "major_category": "IT",
-            "sub_category": "개발",
-            "tags": item.get("tag_list", [])[:10],
-            "translate_to_korean": True,
-        })
+            fallback = _short_content(item)
+            article_id = item.get("id")
+            content = _fetch_full_content(client, article_id, fallback) if article_id else fallback
+
+            articles.append({
+                "url": url,
+                "source": "dev.to",
+                "title": title,
+                "content": content,
+                "published_at": item.get("published_at") or datetime.now().isoformat(),
+                "crawled_at": datetime.now().isoformat(),
+                "major_category": "IT",
+                "sub_category": "개발",
+                "tags": item.get("tag_list", [])[:10],
+                "translate_to_korean": True,
+            })
     return articles
 
 
-def _content(item: dict[str, Any]) -> str:
+def _fetch_full_content(client: httpx.Client, article_id: int, fallback: str) -> str:
+    try:
+        resp = client.get(f"https://dev.to/api/articles/{article_id}", timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+        body = data.get("body_markdown") or data.get("body_html") or ""
+        if body and len(body) > 100:
+            return body[:8000]
+    except Exception as e:
+        logger.warning("dev.to 전체 본문 가져오기 실패 (id=%s): %s", article_id, e)
+    return fallback
+
+
+def _short_content(item: dict[str, Any]) -> str:
     parts = [
         item.get("description", ""),
         item.get("readable_publish_date", ""),

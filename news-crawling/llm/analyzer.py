@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from typing import Optional
 
 from config import GEMINI_API_KEY, GEMINI_MODEL, MAJOR_CATEGORIES
@@ -44,6 +45,7 @@ _client = None
 
 
 def _get_client():
+    """Gemini API 클라이언트를 반환한다. 최초 호출 시에만 초기화(싱글턴)."""
     global _client
     if _client is None:
         try:
@@ -56,20 +58,39 @@ def _get_client():
     return _client
 
 
+def _has_korean(text: str) -> bool:
+    """문자열에 한글(가~힣)이 하나 이상 포함되어 있으면 True를 반환한다."""
+    return any("가" <= ch <= "힣" for ch in text)
+
+
 def _call_gemini(prompt: str) -> Optional[str]:
-    try:
-        client = _get_client()
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-        )
-        return response.text.strip()
-    except Exception as e:
-        logger.error("Gemini 호출 실패: %s", e)
-        return None
+    """Gemini 모델에 프롬프트를 전송하고 응답 텍스트를 반환한다.
+
+    최대 3회 지수 백오프 재시도를 수행하며, 모든 시도 실패 시 None을 반환한다.
+    """
+    for attempt in range(3):
+        try:
+            client = _get_client()
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+            )
+            return response.text.strip()
+        except Exception as e:
+            if attempt < 2:
+                wait = 2 ** attempt
+                logger.warning("Gemini 호출 실패 (시도 %d/3), %ds 후 재시도: %s", attempt + 1, wait, e)
+                time.sleep(wait)
+            else:
+                logger.error("Gemini 호출 최종 실패: %s", e)
+    return None
 
 
 def summarize(text: str) -> str:
+    """뉴스 본문을 한국어 3~5문장으로 요약해 반환한다.
+
+    텍스트가 없거나 20자 미만이면 빈 문자열을 반환한다.
+    """
     if not text or len(text) < 20:
         return ""
     content = text[:3000]
@@ -78,44 +99,75 @@ def summarize(text: str) -> str:
 
 
 def translate_article_to_korean(title: str, content: str) -> Optional[dict[str, str]]:
+    """기사 제목과 본문을 한국어로 번역해 {"title": ..., "content": ...} 딕셔너리로 반환한다.
+
+    번역 결과가 한국어가 아니거나 파싱에 실패하면 최대 3회 재시도하며,
+    모두 실패하면 None을 반환한다.
+    """
     source_text = content if content and len(content) >= 20 else title
     if not source_text:
         return None
-    raw = _call_gemini(_TRANSLATE_ARTICLE_PROMPT.format(
+
+    prompt = _TRANSLATE_ARTICLE_PROMPT.format(
         title=title,
         content=source_text[:5000],
-    ))
-    if not raw:
-        return None
+    )
 
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    if start == -1 or end == 0:
-        logger.warning("LLM 번역 응답 파싱 실패: %s", raw[:200])
-        return None
+    for attempt in range(3):
+        raw = _call_gemini(prompt)
+        if not raw:
+            if attempt < 2:
+                time.sleep(2)
+            continue
 
-    try:
-        result = json.loads(raw[start:end])
-    except json.JSONDecodeError as e:
-        logger.warning("LLM 번역 JSON 파싱 실패: %s | raw=%s", e, raw[:200])
-        return None
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start == -1 or end == 0:
+            logger.warning("LLM 번역 응답 파싱 실패 (시도 %d): %s", attempt + 1, raw[:200])
+            if attempt < 2:
+                time.sleep(2)
+            continue
 
-    translated_title = str(result.get("title") or title).strip()
-    translated_content = str(result.get("content") or "").strip()
-    if not translated_content:
-        return None
-    return {
-        "title": translated_title,
-        "content": translated_content,
-    }
+        try:
+            result = json.loads(raw[start:end])
+        except json.JSONDecodeError as e:
+            logger.warning("LLM 번역 JSON 파싱 실패 (시도 %d): %s | raw=%s", attempt + 1, e, raw[:200])
+            if attempt < 2:
+                time.sleep(2)
+            continue
+
+        translated_title = str(result.get("title") or title).strip()
+        translated_content = str(result.get("content") or "").strip()
+
+        if not translated_content:
+            if attempt < 2:
+                time.sleep(2)
+            continue
+
+        if _has_korean(translated_title + translated_content[:300]):
+            return {"title": translated_title, "content": translated_content}
+
+        logger.warning("번역 결과가 한국어 아님 (시도 %d/3)", attempt + 1)
+        if attempt < 2:
+            time.sleep(2)
+
+    return None
 
 
 def translate_to_korean(title: str, content: str) -> str:
+    """translate_article_to_korean의 래퍼로, 번역된 본문 문자열만 반환한다.
+
+    번역 실패 시 빈 문자열을 반환한다.
+    """
     result = translate_article_to_korean(title, content)
     return result["content"] if result else ""
 
 
 def classify(title: str, content: str) -> dict:
+    """기사를 대분류·중분류·태그로 분류해 딕셔너리로 반환한다.
+
+    LLM 호출 실패 또는 파싱 오류 시 {"major_category": "기타", "sub_category": "", "tags": []}를 반환한다.
+    """
     fallback = {"major_category": "기타", "sub_category": "", "tags": []}
     if not title:
         return fallback

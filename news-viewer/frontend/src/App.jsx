@@ -8,7 +8,6 @@ const ACCENT_MID = "#8b5cf6";
 const BORDER = "#e5e7eb";
 const TEXT_SECONDARY = "#6b7280";
 const TEXT_MUTED = "#9ca3af";
-const CATEGORY_FILTERS = ["경제", "IT", "기타"];
 const SOURCE_FILTERS = ["네이버뉴스", "조선일보", "한겨레", "Google News", "arXiv", "dev.to"];
 
 const cleanArticleText = (text = "") =>
@@ -297,6 +296,7 @@ export default function App() {
   const [categories, setCategories] = useState([]);
   const [sources, setSources] = useState([]);
   const [total, setTotal] = useState(0);
+  const [totalAll, setTotalAll] = useState(0);
   const [page, setPage] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedSource, setSelectedSource] = useState("");
@@ -310,6 +310,7 @@ export default function App() {
   useEffect(() => {
     fetch(`${API}/categories`).then((r) => r.json()).then(setCategories);
     fetch(`${API}/sources`).then((r) => r.json()).then(setSources);
+    fetch(`${API}/articles?page=1&size=1`).then((r) => r.json()).then((data) => setTotalAll(data.total));
   }, []);
 
   useEffect(() => {
@@ -335,14 +336,11 @@ export default function App() {
 
   const totalPages = Math.ceil(total / SIZE);
   const categoryItems = [
-    { major_category: "", count: total },
-    ...CATEGORY_FILTERS.map((category) => ({
-      major_category: category,
-      count: categories.find((c) => c.major_category === category)?.count ?? 0,
-    })),
+    { major_category: "", count: totalAll },
+    ...categories,
   ];
   const sourceItems = [
-    { source: "", count: total },
+    { source: "", count: totalAll },
     ...SOURCE_FILTERS.map((source) => ({
       source,
       count: sources.find((item) => item.source === source)?.count ?? 0,
@@ -351,12 +349,14 @@ export default function App() {
 
   const handleCategoryClick = (cat) => {
     setSelectedCategory(cat);
+    setSelectedSource("");
     setPage(1);
     setSelected(null);
   };
 
   const handleSourceClick = (src) => {
     setSelectedSource(src);
+    setSelectedCategory("");
     setPage(1);
     setSelected(null);
   };

@@ -4,6 +4,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
+import trafilatura
 from bs4 import BeautifulSoup
 
 from config import CRAWL_HEADERS, REQUEST_TIMEOUT
@@ -60,10 +61,12 @@ def _fetch_query(
 
         pub_date = item.find("pubDate")
         description = item.find("description")
-        content = BeautifulSoup(
+        fallback = BeautifulSoup(
             description.get_text(" ", strip=True) if description else "",
             "html.parser",
         ).get_text(" ", strip=True)
+
+        content = _fetch_article_content(client, url, fallback)
 
         articles.append({
             "url": url,
@@ -76,3 +79,20 @@ def _fetch_query(
             "translate_to_korean": True,
         })
     return articles
+
+
+def _fetch_article_content(client: httpx.Client, url: str, fallback: str) -> str:
+    try:
+        resp = client.get(url, timeout=15)
+        resp.raise_for_status()
+        content = trafilatura.extract(
+            resp.text,
+            include_comments=False,
+            include_tables=False,
+            no_fallback=False,
+        )
+        if content and len(content) > 200:
+            return content[:8000]
+    except Exception as e:
+        logger.warning("Google News 원문 추출 실패 (%s): %s", url[:80], e)
+    return fallback

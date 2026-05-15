@@ -2,14 +2,51 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 
 DB_PATH = Path(__file__).parent.parent.parent / "news-crawling" / "news.db"
 
-app = FastAPI(title="News Viewer API")
+app = FastAPI(
+    title="News Viewer API",
+    description="뉴스 크롤링 데이터를 조회하는 REST API. 기사 목록·상세·카테고리·출처 엔드포인트를 제공합니다.",
+    version="1.0.0",
+)
+
+
+class Article(BaseModel):
+    id: int
+    url: str
+    source: str
+    title: str
+    content: Optional[str] = None
+    published_at: Optional[str] = None
+    crawled_at: Optional[str] = None
+    summary: Optional[str] = None
+    major_category: Optional[str] = None
+    sub_category: Optional[str] = None
+    tags: list[str] = []
+
+
+class ArticleListResponse(BaseModel):
+    total: int
+    page: int
+    size: int
+    articles: list[Article]
+
+
+class CategoryCount(BaseModel):
+    major_category: str
+    count: int
+
+
+class SourceCount(BaseModel):
+    source: str
+    count: int
 
 app.add_middleware(
     CORSMiddleware,
@@ -154,13 +191,19 @@ def _row_to_dict(row) -> dict:
     return d
 
 
-@app.get("/articles")
+@app.get(
+    "/articles",
+    response_model=ArticleListResponse,
+    summary="기사 목록 조회",
+    description="크롤링된 뉴스 기사 목록을 페이지네이션으로 반환합니다. 카테고리·출처·키워드로 필터링할 수 있습니다.",
+    tags=["articles"],
+)
 def get_articles(
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
-    category: str | None = None,
-    source: str | None = None,
-    q: str | None = None,
+    page: int = Query(1, ge=1, description="페이지 번호 (1부터 시작)"),
+    size: int = Query(20, ge=1, le=100, description="페이지당 기사 수 (최대 100)"),
+    category: Optional[str] = Query(None, description="대분류 필터 (예: IT/과학, 경제)"),
+    source: Optional[str] = Query(None, description="출처 필터 (예: devto, google_news)"),
+    q: Optional[str] = Query(None, description="제목 또는 요약 전문 검색어"),
 ):
     offset = (page - 1) * size
     conditions = []
@@ -209,7 +252,13 @@ def get_articles(
     }
 
 
-@app.get("/articles/{article_id}")
+@app.get(
+    "/articles/{article_id}",
+    response_model=Article,
+    summary="기사 상세 조회",
+    description="article_id로 단일 기사의 전체 정보를 반환합니다. 존재하지 않으면 404를 반환합니다.",
+    tags=["articles"],
+)
 def get_article(article_id: int):
     with _connect() as conn:
         row = conn.execute(
@@ -232,7 +281,13 @@ def get_article(article_id: int):
     return _row_to_dict(row)
 
 
-@app.get("/categories")
+@app.get(
+    "/categories",
+    response_model=list[CategoryCount],
+    summary="카테고리 목록 조회",
+    description="기사에 사용된 대분류 카테고리와 각 카테고리의 기사 수를 반환합니다.",
+    tags=["meta"],
+)
 def get_categories():
     with _connect() as conn:
         rows = conn.execute(
@@ -249,7 +304,13 @@ def get_categories():
     return [dict(r) for r in rows]
 
 
-@app.get("/sources")
+@app.get(
+    "/sources",
+    response_model=list[SourceCount],
+    summary="출처 목록 조회",
+    description="크롤링에 사용된 뉴스 출처와 각 출처의 기사 수를 반환합니다.",
+    tags=["meta"],
+)
 def get_sources():
     with _connect() as conn:
         rows = conn.execute(
