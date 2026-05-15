@@ -27,6 +27,18 @@ def init_db() -> None:
                 tags           TEXT
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS article_analysis (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                article_id     INTEGER NOT NULL REFERENCES articles(id),
+                summary        TEXT,
+                major_category TEXT,
+                sub_category   TEXT,
+                tags           TEXT,
+                analyzed_at    TEXT NOT NULL,
+                UNIQUE(article_id)
+            )
+        """)
         conn.commit()
 
 
@@ -50,6 +62,44 @@ def get_article_by_url(url: str) -> Optional[dict]:
     with _connect() as conn:
         row = conn.execute("SELECT * FROM articles WHERE url = ?", (url,)).fetchone()
         return dict(row) if row else None
+
+
+def get_article_id_by_url(url: str) -> Optional[int]:
+    with _connect() as conn:
+        row = conn.execute("SELECT id FROM articles WHERE url = ?", (url,)).fetchone()
+        return row["id"] if row else None
+
+
+def save_analysis(
+    article_id: int,
+    summary: str,
+    major_category: str,
+    sub_category: str,
+    tags: list,
+) -> bool:
+    tags_json = json.dumps(tags, ensure_ascii=False)
+    with _connect() as conn:
+        try:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO article_analysis
+                    (article_id, summary, major_category, sub_category, tags, analyzed_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    article_id,
+                    summary,
+                    major_category,
+                    sub_category,
+                    tags_json,
+                    datetime.now().isoformat(),
+                ),
+            )
+            conn.commit()
+            return conn.execute("SELECT changes()").fetchone()[0] > 0
+        except sqlite3.Error as e:
+            logger.error("분석 결과 저장 실패 article_id=%s: %s", article_id, e)
+            return False
 
 
 def update_article_translation(article: dict) -> bool:
