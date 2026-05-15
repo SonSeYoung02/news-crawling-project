@@ -28,6 +28,7 @@ def run_pipeline() -> None:
     from db import (
         get_article_by_url,
         get_article_id_by_url,
+        has_analysis,
         init_db,
         is_duplicate,
         save_analysis,
@@ -47,7 +48,30 @@ def run_pipeline() -> None:
     saved = skipped_dup = skipped_translation = 0
 
     for article in articles:
-        # 2. 번역 (실패해도 원문으로 계속 진행)
+        # 2. 중복 체크 (번역 전에 먼저 확인 — LLM 낭비 방지)
+        if is_duplicate(article["url"]):
+            update_content_if_empty(article)
+            skipped_dup += 1
+            # 분석이 누락된 경우 기존 저장된 내용으로 재분석
+            article_id = get_article_id_by_url(article["url"])
+            if article_id and not has_analysis(article_id):
+                existing = get_article_by_url(article["url"])
+                if existing:
+                    dup_summary = summarize(existing.get("content", ""))
+                    dup_classification = classify(existing.get("title", ""), existing.get("content", ""))
+                    if dup_classification["major_category"] == "기타" and article.get("major_category"):
+                        dup_classification["major_category"] = article["major_category"]
+                    save_analysis(
+                        article_id=article_id,
+                        summary=dup_summary,
+                        major_category=dup_classification["major_category"],
+                        sub_category=dup_classification.get("sub_category", ""),
+                        tags=dup_classification.get("tags", []),
+                    )
+                    logger.info("누락 분석 보완: %s", _safe_log_text(existing.get("title", "")[:40]))
+            continue
+
+        # 3. 번역 (실패해도 원문으로 계속 진행)
         if article.get("translate_to_korean"):
             translated = translate_article_to_korean(
                 article.get("title", ""),
@@ -63,12 +87,7 @@ def run_pipeline() -> None:
                     _safe_log_text(article["title"][:40]),
                 )
 
-        # 3. articles 테이블에 저장
-        if is_duplicate(article["url"]):
-            update_content_if_empty(article)
-            skipped_dup += 1
-            continue
-
+        # 4. articles 테이블에 저장
         if not save_article(article):
             skipped_dup += 1
             continue
@@ -76,10 +95,10 @@ def run_pipeline() -> None:
         saved += 1
         logger.info("저장: %s", _safe_log_text(article["title"][:40]))
 
-        # 4. LLM 요약
+        # 5. LLM 요약
         summary = summarize(article.get("content", ""))
 
-        # 5. LLM 분류
+        # 6. LLM 분류
         classification = classify(article.get("title", ""), article.get("content", ""))
         if classification["major_category"] == "기타" and article.get("major_category"):
             classification["major_category"] = article["major_category"]
@@ -88,16 +107,18 @@ def run_pipeline() -> None:
         if not classification["tags"] and article.get("tags"):
             classification["tags"] = article["tags"]
 
-        # 6. article_analysis 테이블에 저장
+        # 7. article_analysis 테이블에 저장
         article_id = get_article_id_by_url(article["url"])
         if article_id:
-            save_analysis(
+            ok = save_analysis(
                 article_id=article_id,
                 summary=summary,
                 major_category=classification["major_category"],
                 sub_category=classification.get("sub_category", ""),
                 tags=classification.get("tags", []),
             )
+            if not ok:
+                logger.warning("분석 저장 실패: %s", _safe_log_text(article["title"][:40]))
 
     logger.info(
         "=== 파이프라인 완료 | 수집: %d | 저장: %d | 중복 건너뜀: %d | 번역 실패: %d ===",

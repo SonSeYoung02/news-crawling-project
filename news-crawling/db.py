@@ -102,6 +102,14 @@ def save_analysis(
             return False
 
 
+def has_analysis(article_id: int) -> bool:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM article_analysis WHERE article_id = ?", (article_id,)
+        ).fetchone()
+        return row is not None
+
+
 def update_article_translation(article: dict) -> bool:
     with _connect() as conn:
         conn.execute(
