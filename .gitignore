@@ -1,6 +1,9 @@
 .omc
 .vscode
 
+# Local documentation
+/docs/
+
 # Python
 __pycache__/
 *.py[cod]
