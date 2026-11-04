@@ -40,6 +40,18 @@ desktop.ini
 # OMC / agent state
 .omc/
 .claude/
+.agents/
+
+# OpenSpec
+openspec/
+.github/agents/
+.github/prompts/
+.github/skills/
+.github/workflows/copilot-setup-steps.yml
+
+# Graphify
+graphify-out/
+**/graphify-out/
 
 # AI agent documentation (auto-generated)
 AGENTS.md
