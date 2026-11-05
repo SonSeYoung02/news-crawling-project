@@ -1,0 +1,48 @@
+name: 작업 이슈 (Task)
+description: 기능 추가, 버그 수정, 리팩터링, 인프라/설정 작업 등록
+title: "[Chore] "
+assignees:
+  - SonSeYoung02
+body:
+  - type: markdown
+    attributes:
+      value: |
+        제목 접두사는 작업에 맞게 [Feature], [Fix], [Refactor], [Docs], [Chore] 중 하나로 변경해 주세요.
+  - type: textarea
+    id: background
+    attributes:
+      label: 배경 (Background)
+      description: 작업이 필요한 이유와 현행 문제점 또는 제약 사항을 작성해 주세요.
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: 대상 영역 (Scope)
+      options:
+        - label: news-crawling (크롤러 / LLM 파이프라인 / DB)
+        - label: news-viewer/backend (FastAPI 서버)
+        - label: news-viewer/frontend (React + Vite UI)
+        - label: 공통 / 인프라 / 문서
+  - type: textarea
+    id: tasks
+    attributes:
+      label: 작업 내용 (Tasks)
+      description: 진행할 작업을 체크리스트로 작성해 주세요.
+      value: |
+        - [ ] 작업 항목 1
+        - [ ] 작업 항목 2
+    validations:
+      required: true
+  - type: textarea
+    id: expected-results
+    attributes:
+      label: 기대 효과 (Expected Results)
+      description: 작업이 완료되면 무엇이 달라지는지 작성해 주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: 기타 참고 사항
+      description: 관련 작업 문서(docs/작업/ 또는 openspec/changes/), 엔드포인트, DB 스키마 변경 여부 등을 작성해 주세요.
