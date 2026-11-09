@@ -22,11 +22,24 @@ uvicorn main:app --reload
 
 ## 주요 기능
 
-- **카테고리 필터** — 경제 / IT / 기타
-- **출처 필터** — 네이버뉴스 / 조선일보 / 한겨레 / Google News / arXiv / dev.to
-- **키워드 검색** — 제목 및 본문 대상 (Enter 또는 검색 버튼)
+- **카테고리 필터** — API가 반환하는 카테고리와 건수 표시
+- **출처 필터** — 네이버뉴스 / Google News / GeekNews / Reddit AI / GitHub Trending / Hugging Face / arXiv / dev.to
+- **키워드 검색** — 제목 및 요약 대상 (Enter 또는 검색 버튼)
 - **기사 상세 보기** — AI 요약, 본문 전문, 태그, 원문 링크
 - **페이지네이션** — 페이지당 20건
+- **반응형 화면** — 1,024px 이상은 3단 구성, 작은 화면은 접이식 필터와 기사 목록·상세 전환
+
+## 휴대폰에서 접속하기
+
+1. PC와 휴대폰을 같은 Wi-Fi에 연결하고 PC에서 백엔드와 `npm run dev`를 실행합니다.
+2. PC의 내부 IPv4 주소를 확인하고 휴대폰에서 `http://<PC의 내부 IP>:5173`에 접속합니다. 휴대폰의 `localhost`는 PC를 가리키지 않습니다.
+3. Vite는 LAN 인터페이스에서 수신하며 `/api` 요청을 PC 내부의 `http://127.0.0.1:8000`으로 전달합니다. 백엔드를 외부 인터페이스에 노출할 필요가 없습니다.
+
+호스트 방화벽 또는 공유기의 무선 기기 격리 설정이 접속을 막을 수 있습니다. 앱은 방화벽이나 공유기 설정을 자동 변경하지 않습니다. 개발 서버 포트가 사용 중이면 실행을 중단하므로 별도 worktree를 실행할 때는 `npm run dev -- --port 5180`처럼 지정하고 해당 포트로 접속합니다.
+
+## 운영 배포의 API 연결
+
+프론트엔드는 같은 출처의 `/api`를 호출합니다. 개발 서버와 `npm run preview`에는 프록시가 구성되어 있지만, `dist/`를 정적 호스팅할 때는 웹 서버에서 `/api/*`를 백엔드의 `/*`로 전달하는 리버스 프록시를 별도로 구성해야 합니다. `npm run preview`는 로컬 빌드 확인용이며 운영 서버로 사용하지 않습니다. Cloudflare Tunnel만 연결한다고 API 경로가 자동 구성되지는 않습니다.
 
 ## 빌드
 
@@ -42,7 +55,7 @@ npm run preview  # 프로덕션 빌드 로컬 미리보기
 | 프레임워크 | React 18 |
 | 번들러 | Vite 8 |
 | 스타일 | 인라인 스타일 (CSS-in-JS 없음) |
-| API | FastAPI `http://localhost:8000` |
+| API | 같은 출처 `/api` → FastAPI `http://127.0.0.1:8000` |
 
 ## 프로젝트 구조
 
@@ -61,4 +74,4 @@ frontend/
 ## 참고
 
 - `.npmrc`의 `legacy-peer-deps=true`는 Vite 8과 `@vitejs/plugin-react` 4.x 간 peer dependency 충돌 우회를 위한 설정입니다.
-- API의 CORS는 `localhost:5173`만 허용합니다. 포트가 바뀌면 백엔드 `main.py`의 `allow_origins`를 함께 수정하세요.
+- 브라우저는 프론트와 같은 출처의 `/api`만 호출하므로 LAN 접속을 위해 백엔드 CORS 허용 목록을 넓힐 필요가 없습니다.
