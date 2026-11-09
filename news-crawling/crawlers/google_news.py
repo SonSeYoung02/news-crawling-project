@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://news.google.com/rss/search"
 _QUERIES = [
     ("global economy OR markets OR business", "경제"),
-    ("artificial intelligence OR semiconductors OR technology", "IT"),
+    ("artificial intelligence OR LLM OR generative AI", "AI"),
 ]
 
 

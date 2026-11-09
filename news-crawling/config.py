@@ -21,7 +21,7 @@ _load_env_file()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
-MAJOR_CATEGORIES = ["IT", "경제", "정치", "사회", "스포츠", "연예", "국제"]
+MAJOR_CATEGORIES = ["AI", "IT", "경제", "국제"]
 
 SCHEDULE_HOUR = 8
 SCHEDULE_MINUTE = 0
