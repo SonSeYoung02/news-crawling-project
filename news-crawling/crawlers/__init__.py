@@ -2,19 +2,23 @@ import logging
 from typing import Any
 
 from .arxiv import fetch as fetch_arxiv
-from .chosun import fetch as fetch_chosun
 from .devto import fetch as fetch_devto
+from .geeknews import fetch as fetch_geeknews
+from .github_trending import fetch as fetch_github_trending
 from .google_news import fetch as fetch_google_news
-from .hankyoreh import fetch as fetch_hankyoreh
+from .huggingface import fetch as fetch_huggingface
 from .naver import fetch as fetch_naver
+from .reddit_ai import fetch as fetch_reddit_ai
 
 logger = logging.getLogger(__name__)
 
 _SOURCES = [
     ("네이버뉴스", fetch_naver),
-    ("조선일보", fetch_chosun),
-    ("한겨레", fetch_hankyoreh),
     ("Google News", fetch_google_news),
+    ("GeekNews", fetch_geeknews),
+    ("Reddit AI", fetch_reddit_ai),
+    ("GitHub Trending", fetch_github_trending),
+    ("Hugging Face", fetch_huggingface),
     ("arXiv", fetch_arxiv),
     ("dev.to", fetch_devto),
 ]

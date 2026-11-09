@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
-const API = "http://localhost:8000";
+const API = "/api";
+const COMPACT_QUERY = "(max-width: 1023px)";
 
 const ACCENT = "#7c3aed";
 const ACCENT_LIGHT = "#ede9fe";
@@ -8,7 +9,22 @@ const ACCENT_MID = "#8b5cf6";
 const BORDER = "#e5e7eb";
 const TEXT_SECONDARY = "#6b7280";
 const TEXT_MUTED = "#9ca3af";
-const SOURCE_FILTERS = ["네이버뉴스", "조선일보", "한겨레", "Google News", "arXiv", "dev.to"];
+const SOURCE_FILTERS = [
+  "네이버뉴스",
+  "Google News",
+  "GeekNews",
+  "Reddit AI",
+  "GitHub Trending",
+  "Hugging Face",
+  "arXiv",
+  "dev.to",
+];
+
+async function fetchJSON(path, signal) {
+  const response = await fetch(`${API}${path}`, { signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
+}
 
 const cleanArticleText = (text = "") =>
   text
@@ -20,7 +36,7 @@ const cleanArticleText = (text = "") =>
 const s = {
   layout: {
     display: "flex",
-    height: "100vh",
+    height: "100dvh",
     overflow: "hidden",
     background: "#f8fafc",
   },
@@ -83,6 +99,8 @@ const s = {
   }),
   main: {
     flex: 1,
+    minWidth: 0,
+    minHeight: 0,
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
@@ -97,10 +115,11 @@ const s = {
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     padding: "9px 14px",
     borderRadius: 10,
     border: `1.5px solid ${BORDER}`,
-    fontSize: 14,
+    fontSize: 16,
     outline: "none",
     background: "#f9fafb",
     transition: "border-color 0.15s",
@@ -119,17 +138,23 @@ const s = {
   },
   content: {
     flex: 1,
+    minHeight: 0,
     display: "flex",
     overflow: "hidden",
   },
   listPanel: {
-    width: 400,
+    flex: "0 1 400px",
+    minWidth: 280,
     overflowY: "auto",
     borderRight: `1px solid ${BORDER}`,
     background: "#f8fafc",
     padding: "12px 12px",
   },
   card: (selected) => ({
+    width: "100%",
+    textAlign: "left",
+    fontFamily: "inherit",
+    overflowWrap: "anywhere",
     padding: "14px 16px",
     borderRadius: 12,
     marginBottom: 8,
@@ -208,6 +233,8 @@ const s = {
   },
   detailPanel: {
     flex: 1,
+    minWidth: 0,
+    overflowWrap: "anywhere",
     overflowY: "auto",
     padding: "32px 40px",
     background: "#ffffff",
@@ -289,6 +316,18 @@ const s = {
     padding: "40px 0",
     fontSize: 14,
   },
+  compactLayout: { flexDirection: "column" },
+  compactSidebar: { width: "100%", flexShrink: 0, borderRight: "none", borderBottom: `1px solid ${BORDER}` },
+  compactHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 16px", borderBottom: "none" },
+  compactFilters: { maxHeight: "40dvh", padding: "0 12px 12px" },
+  compactTopbar: { padding: "10px 12px", gap: 8 },
+  compactList: { width: "100%", minWidth: 0, flex: 1, borderRight: "none" },
+  compactDetail: { width: "100%", padding: "20px 16px", flex: 1 },
+  filterButton: { minHeight: 44, padding: "8px 12px", border: `1px solid ${BORDER}`, borderRadius: 8, background: "#fff", color: ACCENT, font: "inherit", cursor: "pointer", flexShrink: 0 },
+  filterControl: { width: "100%", minHeight: 44, border: "none", fontFamily: "inherit", textAlign: "left" },
+  touchButton: { minHeight: 44 },
+  backButton: { minHeight: 44, marginBottom: 16, padding: "8px 12px", border: `1px solid ${BORDER}`, borderRadius: 8, background: "#fff", color: ACCENT, font: "inherit", cursor: "pointer" },
+  error: { padding: "12px 16px", color: "#991b1b", background: "#fef2f2", fontSize: 14, flexShrink: 0 },
 };
 
 export default function App() {
@@ -304,35 +343,69 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [metadataError, setMetadataError] = useState("");
+  const [isCompact, setIsCompact] = useState(() => window.matchMedia(COMPACT_QUERY).matches);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const SIZE = 20;
 
   useEffect(() => {
-    fetch(`${API}/categories`).then((r) => r.json()).then(setCategories);
-    fetch(`${API}/sources`).then((r) => r.json()).then(setSources);
-    fetch(`${API}/articles?page=1&size=1`).then((r) => r.json()).then((data) => setTotalAll(data.total));
+    const media = window.matchMedia(COMPACT_QUERY);
+    const onChange = (event) => {
+      setIsCompact(event.matches);
+      setFiltersOpen(false);
+    };
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      fetchJSON("/categories", controller.signal),
+      fetchJSON("/sources", controller.signal),
+      fetchJSON("/articles?page=1&size=1", controller.signal),
+    ]).then(([categoryData, sourceData, articleData]) => {
+      setCategories(categoryData);
+      setSources(sourceData);
+      setTotalAll(articleData.total);
+    }).catch(() => {
+      if (!controller.signal.aborted) setMetadataError("필터 정보를 불러오지 못했습니다. 서버 연결을 확인해 주세요.");
+    });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
+    setError("");
+    setSelected(null);
     const params = new URLSearchParams({ page, size: SIZE });
     if (selectedCategory) params.set("category", selectedCategory);
     if (selectedSource) params.set("source", selectedSource);
     if (search) params.set("q", search);
-    fetch(`${API}/articles?${params}`)
-      .then((r) => r.json())
+    fetchJSON(`/articles?${params}`, controller.signal)
       .then((data) => {
         setArticles(data.articles);
         setTotal(data.total);
       })
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setArticles([]);
+          setTotal(0);
+          setError("기사를 불러오지 못했습니다. 서버 연결을 확인해 주세요.");
+        }
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
   }, [page, selectedCategory, selectedSource, search]);
 
   useEffect(() => {
-    if (!loading && !selected && articles.length > 0) {
+    if (!isCompact && !loading && !selected && articles.length > 0) {
       setSelected(articles[0]);
     }
-  }, [articles, loading, selected]);
+  }, [articles, loading, selected, isCompact]);
 
   const totalPages = Math.ceil(total / SIZE);
   const categoryItems = [
@@ -348,6 +421,7 @@ export default function App() {
   ];
 
   const handleCategoryClick = (cat) => {
+    setFiltersOpen(false);
     setSelectedCategory(cat);
     setSelectedSource("");
     setPage(1);
@@ -355,6 +429,7 @@ export default function App() {
   };
 
   const handleSourceClick = (src) => {
+    setFiltersOpen(false);
     setSelectedSource(src);
     setSelectedCategory("");
     setPage(1);
@@ -362,36 +437,47 @@ export default function App() {
   };
 
   return (
-    <div style={s.layout}>
+    <div style={{ ...s.layout, ...(isCompact ? s.compactLayout : {}) }}>
       {/* Sidebar */}
-      <aside style={s.sidebar}>
-        <div style={s.sidebarHeader}>
-          <div style={s.sidebarTitle}>📰 뉴스 뷰어</div>
-          <div style={s.sidebarSubtitle}>크롤링 뉴스 모아보기</div>
+      <aside style={{ ...s.sidebar, ...(isCompact ? s.compactSidebar : {}) }}>
+        <div style={{ ...s.sidebarHeader, ...(isCompact ? s.compactHeader : {}) }}>
+          <div>
+            <div style={s.sidebarTitle}>📰 뉴스 뷰어</div>
+            <div style={s.sidebarSubtitle}>크롤링 뉴스 모아보기</div>
+          </div>
+          {isCompact && (
+            <button type="button" style={s.filterButton} aria-expanded={filtersOpen} aria-controls="news-filters" onClick={() => setFiltersOpen((open) => !open)}>
+              {filtersOpen ? "필터 닫기" : "필터"}
+            </button>
+          )}
         </div>
-        <div style={s.sidebarScroll}>
+        <div id="news-filters" hidden={isCompact && !filtersOpen} style={{ ...s.sidebarScroll, ...(isCompact ? s.compactFilters : {}) }}>
           <div style={{ ...s.sectionLabel, marginTop: 4 }}>카테고리</div>
           {categoryItems.map((c) => (
-            <div
+            <button
+              type="button"
               key={c.major_category}
+              aria-pressed={selectedCategory === c.major_category}
               onClick={() => handleCategoryClick(c.major_category)}
-              style={s.filterItem(selectedCategory === c.major_category)}
+              style={{ ...s.filterItem(selectedCategory === c.major_category), ...s.filterControl }}
             >
               <span>{c.major_category || "전체"}</span>
               <span style={s.filterCount(selectedCategory === c.major_category)}>{c.count}</span>
-            </div>
+            </button>
           ))}
 
           <div style={s.sectionLabel}>출처</div>
           {sourceItems.map((src) => (
-            <div
+            <button
+              type="button"
               key={src.source}
+              aria-pressed={selectedSource === src.source}
               onClick={() => handleSourceClick(src.source)}
-              style={s.filterItem(selectedSource === src.source)}
+              style={{ ...s.filterItem(selectedSource === src.source), ...s.filterControl }}
             >
               <span>{src.source || "전체"}</span>
               <span style={s.filterCount(selectedSource === src.source)}>{src.count}</span>
-            </div>
+            </button>
           ))}
         </div>
       </aside>
@@ -399,34 +485,39 @@ export default function App() {
       {/* Main */}
       <main style={s.main}>
         {/* Topbar */}
-        <div style={s.topbar}>
+        <div style={{ ...s.topbar, ...(isCompact ? s.compactTopbar : {}) }}>
           <input
+            aria-label="기사 검색"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") { setSearch(query); setPage(1); setSelected(null); }
             }}
-            placeholder="기사 제목, 내용으로 검색..."
+            placeholder="기사 제목, 요약으로 검색..."
             style={s.searchInput}
           />
           <button
             onClick={() => { setSearch(query); setPage(1); setSelected(null); }}
-            style={s.searchBtn}
+            style={{ ...s.searchBtn, ...s.touchButton }}
           >
             검색
           </button>
         </div>
 
+        {(error || metadataError) && <div role="alert" style={s.error}>{error || metadataError}</div>}
+
         <div style={s.content}>
           {/* Article List */}
-          <div style={s.listPanel}>
+          <div aria-label="기사 목록" style={{ ...s.listPanel, ...(isCompact ? s.compactList : {}), ...(isCompact && selected ? { display: "none" } : {}) }}>
             {loading && <div style={s.statusText}>불러오는 중...</div>}
-            {!loading && articles.length === 0 && (
+            {!loading && !error && articles.length === 0 && (
               <div style={s.statusText}>기사가 없습니다</div>
             )}
             {!loading && articles.map((a) => (
-              <div
+              <button
+                type="button"
                 key={a.id}
+                aria-pressed={selected?.id === a.id}
                 onClick={() => setSelected(a)}
                 style={s.card(selected?.id === a.id)}
               >
@@ -448,23 +539,23 @@ export default function App() {
                     ))}
                   </div>
                 )}
-              </div>
+              </button>
             ))}
 
             {totalPages > 1 && (
               <div style={s.pagination}>
                 <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  onClick={() => { setSelected(null); setPage((p) => Math.max(1, p - 1)); }}
                   disabled={page === 1}
-                  style={s.pageBtn(page === 1)}
+                  style={{ ...s.pageBtn(page === 1), ...s.touchButton }}
                 >
                   이전
                 </button>
                 <span style={s.pageInfo}>{page} / {totalPages}</span>
                 <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  onClick={() => { setSelected(null); setPage((p) => Math.min(totalPages, p + 1)); }}
                   disabled={page === totalPages}
-                  style={s.pageBtn(page === totalPages)}
+                  style={{ ...s.pageBtn(page === totalPages), ...s.touchButton }}
                 >
                   다음
                 </button>
@@ -473,13 +564,14 @@ export default function App() {
           </div>
 
           {/* Article Detail */}
-          <div style={s.detailPanel}>
+          <div aria-label="기사 상세" style={{ ...s.detailPanel, ...(isCompact ? s.compactDetail : {}), ...(isCompact && !selected ? { display: "none" } : {}) }}>
             {!selected ? (
               <div style={s.detailEmpty}>
                 <span style={{ fontSize: 14 }}>기사를 선택하세요</span>
               </div>
             ) : (
               <>
+                {isCompact && <button type="button" style={s.backButton} onClick={() => setSelected(null)}>← 목록으로</button>}
                 <div style={s.detailMeta}>
                   <span>{selected.source}</span>
                   <span>·</span>
