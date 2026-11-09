@@ -8,16 +8,7 @@ const ACCENT_MID = "#8b5cf6";
 const BORDER = "#e5e7eb";
 const TEXT_SECONDARY = "#6b7280";
 const TEXT_MUTED = "#9ca3af";
-const SOURCE_FILTERS = [
-  "네이버뉴스",
-  "Google News",
-  "GeekNews",
-  "Reddit AI",
-  "GitHub Trending",
-  "Hugging Face",
-  "arXiv",
-  "dev.to",
-];
+const SOURCE_FILTERS = ["네이버뉴스", "조선일보", "한겨레", "Google News", "arXiv", "dev.to"];
 
 const cleanArticleText = (text = "") =>
   text
