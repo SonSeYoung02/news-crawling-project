@@ -10,8 +10,14 @@ const BORDER = "#e5e7eb";
 const TEXT_SECONDARY = "#6b7280";
 const TEXT_MUTED = "#9ca3af";
 const SOURCE_FILTERS = [
-  "네이버뉴스", "Google News", "GeekNews", "Reddit AI",
-  "GitHub Trending", "Hugging Face", "arXiv", "dev.to",
+  "네이버뉴스",
+  "Google News",
+  "GeekNews",
+  "Reddit AI",
+  "GitHub Trending",
+  "Hugging Face",
+  "arXiv",
+  "dev.to",
 ];
 
 async function fetchJSON(path, signal) {

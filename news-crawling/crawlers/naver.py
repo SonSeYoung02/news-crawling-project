@@ -13,9 +13,6 @@ _BASE_URL = "https://news.naver.com"
 _SECTION_URLS = [
     "https://news.naver.com/main/main.naver?mode=LSD&mid=shm&sid1=105",  # IT/과학
     "https://news.naver.com/main/main.naver?mode=LSD&mid=shm&sid1=101",  # 경제
-    "https://news.naver.com/main/main.naver?mode=LSD&mid=shm&sid1=100",  # 정치
-    "https://news.naver.com/main/main.naver?mode=LSD&mid=shm&sid1=102",  # 사회
-    "https://news.naver.com/main/main.naver?mode=LSD&mid=shm&sid1=107",  # 연예
     "https://news.naver.com/main/main.naver?mode=LSD&mid=shm&sid1=001",  # 국제
 ]
 

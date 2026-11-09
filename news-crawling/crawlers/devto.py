@@ -44,7 +44,7 @@ def fetch() -> list[dict[str, Any]]:
                 "content": content,
                 "published_at": item.get("published_at") or datetime.now().isoformat(),
                 "crawled_at": datetime.now().isoformat(),
-                "major_category": "IT",
+                "major_category": "AI",
                 "sub_category": "개발",
                 "tags": item.get("tag_list", [])[:10],
                 "translate_to_korean": True,
