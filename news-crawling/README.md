@@ -1,6 +1,6 @@
-# 한국어 뉴스 크롤링 + LLM 분석 파이프라인
+# AI·IT 뉴스 크롤링 + LLM 분석 파이프라인
 
-네이버뉴스, 조선일보, 한겨레, Google News, arXiv, dev.to에서 뉴스를 수집하고 Gemini AI로 요약·분류하여 SQLite에 저장하는 파이프라인입니다.
+네이버뉴스, Google News, GeekNews, Reddit AI, GitHub Trending, Hugging Face, arXiv, dev.to에서 최신 뉴스를 수집하고 Gemini AI로 한국어 번역·요약·분류하여 SQLite에 저장하는 파이프라인입니다.
 
 ---
 
@@ -19,22 +19,24 @@
 
 ```
 news-crawling/
-├── main.py              # 진입점 (CLI)
-├── config.py            # 환경 설정 (API 키, DB 경로, 스케줄 등)
-├── db.py                # SQLite 연결 및 저장 로직
+├── main.py                  # 진입점 (CLI)
+├── config.py                # 환경 설정 (API 키, DB 경로, 스케줄 등)
+├── db.py                    # SQLite 연결 및 저장 로직
 ├── crawlers/
-│   ├── __init__.py      # 전체 소스 통합 (get_all_articles)
-│   ├── naver.py         # 네이버뉴스 크롤러 (HTML 파싱)
-│   ├── chosun.py        # 조선일보 크롤러 (RSS)
-│   ├── google_news.py   # Google News 외국 뉴스 크롤러 (RSS)
-│   ├── arxiv.py         # arXiv API 크롤러
-│   ├── devto.py         # dev.to API 크롤러
-│   ├── hankyoreh.py     # 한겨레 크롤러 (RSS)
-│   └── _rss.py          # RSS 공통 파서
+│   ├── __init__.py          # 전체 소스 통합 (get_all_articles)
+│   ├── naver.py             # 네이버뉴스 크롤러 (HTML 파싱)
+│   ├── google_news.py       # Google News 글로벌 크롤러 (RSS)
+│   ├── geeknews.py          # GeekNews 크롤러 (Atom/RSS)
+│   ├── reddit_ai.py         # Reddit AI 서브레딧 크롤러 (RSS)
+│   ├── github_trending.py   # GitHub Trending 오픈소스 크롤러 (HTML)
+│   ├── huggingface.py       # Hugging Face 블로그/논문 크롤러 (RSS/HTML)
+│   ├── arxiv.py             # arXiv API 크롤러
+│   ├── devto.py             # dev.to API 크롤러
+│   └── _rss.py              # RSS 공통 파서
 ├── llm/
-│   └── analyzer.py      # Gemini API 요약·분류
-├── news.db              # SQLite DB (실행 후 생성)
-├── pipeline.log         # 실행 로그 (실행 후 생성)
+│   └── analyzer.py          # Gemini API 번역·요약·분류
+├── news.db                  # SQLite DB (실행 후 생성)
+├── pipeline.log             # 실행 로그 (실행 후 생성)
 └── requirements.txt
 ```
 
@@ -43,85 +45,76 @@ news-crawling/
 ## 동작 로직
 
 ```
-┌─────────────────────────────────────────────┐
-│                  main.py                    │
-│                run_pipeline()               │
-└──────────────────┬──────────────────────────┘
-                   │
-         ① 뉴스 수집 (크롤링)
-                   │
-    ┌──────────────▼──────────────┐
-    │      crawlers/__init__.py   │
-    │       get_all_articles()    │
-    └─┬────────┬────────┬────────┬┘
-      │        │        │        │
-  네이버    조선일보    한겨레   Google News   arXiv   dev.to
-  (HTML)    (RSS)      (RSS)      (RSS)      (API)   (API)
-      │        │        │          │          │       │
-      └────────┴────────┴──────────┴──────────┴───────┘
-                   │
-                   │ articles[]
-                   │
-         ② 중복 필터링
-                   │
-    ┌──────────────▼──────────────┐
-    │           db.py             │
-    │       is_duplicate(url)     │
-    └──────────────┬──────────────┘
-                   │ 신규 기사만
-                   │
-         ③ LLM 분석 (기사별)
-                   │
-    ┌──────────────▼──────────────┐
-    │       llm/analyzer.py       │
-    │  summarize()  classify()    │
-    │    (Gemini 2.5 Flash)       │
-    └──────────────┬──────────────┘
-                   │ summary, major_category,
-                   │ sub_category, tags
-                   │
-         ④ DB 저장
-                   │
-    ┌──────────────▼──────────────┐
-    │           db.py             │
-    │    save_articles_batch()    │
-    │         news.db             │
-    └─────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                       main.py                       │
+│                    run_pipeline()                   │
+└──────────────────────────┬──────────────────────────┘
+                           │
+                 ① 뉴스 수집 (크롤링)
+                           │
+     ┌─────────────────────▼─────────────────────┐
+     │            crawlers/__init__.py           │
+     │             get_all_articles()            │
+     └─┬──────┬──────┬──────┬──────┬──────┬──────┘
+       │      │      │      │      │      │
+    네이버  Google  Geek   Reddit GitHub Hugging arXiv dev.to
+    (HTML)  (RSS)  (Atom)  (RSS)  (HTML)  (RSS)  (API) (API)
+       │      │      │      │      │      │      │     │
+       └──────┴──────┴──────┴──────┴──────┴──────┴─────┘
+                           │
+                           │ articles[]
+                           │
+                 ② 중복 필터링
+                           │
+     ┌─────────────────────▼─────────────────────┐
+     │                   db.py                   │
+     │             is_duplicate(url)             │
+     └─────────────────────┬─────────────────────┘
+                           │ 신규 기사 (또는 분석 누락 기사 보완)
+                           │
+                 ③ LLM 번역 · 요약 · 분류
+                           │
+     ┌─────────────────────▼─────────────────────┐
+     │              llm/analyzer.py              │
+     │   translate_article_to_korean()           │
+     │   summarize() / classify()                │
+     │            (Gemini 2.5 Flash)             │
+     └─────────────────────┬─────────────────────┘
+                           │
+                 ④ DB 저장
+                           │
+     ┌─────────────────────▼─────────────────────┐
+     │                   db.py                   │
+     │     save_article() / save_analysis()      │
+     │                  news.db                  │
+     └───────────────────────────────────────────┘
 ```
 
 ### 크롤러별 동작 방식
 
-| 소스 | 방식 | 수집 기준 |
-|------|------|-----------|
-| 네이버뉴스 | HTML 파싱 | IT/경제/정치/사회/연예/국제 섹션별 최대 5건 |
-| 조선일보 | RSS 파싱 | 피드 최신 10건 |
-| 한겨레 | RSS 파싱 | 피드 최신 10건 |
-| Google News | RSS 파싱 | 경제/IT 검색 피드별 최신 10건 |
-| arXiv | Atom API 파싱 | 지정 논문 ID |
-| dev.to | JSON API 파싱 | AI 태그 인기 글 최신 10건 |
+| 소스 | 방식 | 수집 기준 | 기본 카테고리 |
+|------|------|-----------|:-------------:|
+| 네이버뉴스 | HTML 파싱 | IT/과학, 경제, 국제 섹션별 최대 5건 | `IT`/`경제`/`국제` |
+| Google News | RSS 파싱 | 글로벌 경제 및 AI/LLM 검색 피드별 최신 10건 | `경제`/`AI` |
+| GeekNews | Atom/RSS 파싱 | 긱뉴스 최신 기술/AI 토픽 최대 10건 | `AI` |
+| Reddit AI | RSS 파싱 | `r/LocalLLaMA`, `r/singularity` 핫 토픽 최대 10건 | `AI` |
+| GitHub Trending | HTML 파싱 | 일간 트렌딩 AI/LLM/Agent 오픈소스 저장소 최대 10건 | `AI` |
+| Hugging Face | RSS/HTML 파싱 | 공식 블로그 피드 및 Daily Papers 최신 10건 | `AI` |
+| arXiv | Atom API 파싱 | 지정 AI/CS 논문 메타데이터 및 초록 | `AI` |
+| dev.to | JSON API 파싱 | `ai` 태그 인기 기술 아티클 최신 10건 | `AI` |
 
 ### LLM 분석 내용
 
+- **번역**: 해외 영문 기사(`translate_to_korean: True`)의 제목과 본문을 한국어로 번역
 - **요약**: 기사 본문을 3~5문장으로 요약 (본문 최대 3,000자 사용)
-- **대분류**: IT / 경제 / 정치 / 사회 / 스포츠 / 연예 / 국제
-- **중분류**: 세부 주제 (예: 반도체, 주식시장, 대선)
+- **대분류**: `AI` / `IT` / `경제` / `국제`
+- **중분류**: 세부 주제 (예: LLM, 오픈소스, 반도체, 거시경제)
 - **태그**: 키워드 최대 10개
 
-### DB 스키마 (`articles` 테이블)
+### DB 스키마 (`articles` 및 `article_analysis` 테이블)
 
-| 컬럼 | 설명 |
-|------|------|
-| `id` | 자동 증가 PK |
-| `url` | 기사 URL (UNIQUE) |
-| `source` | 언론사 이름 |
-| `title` | 기사 제목 |
-| `content` | 기사 본문 |
-| `published_at` | 기사 발행일 |
-| `crawled_at` | 수집 시각 |
-| `summary` | LLM 요약 |
-| `major_category` | 대분류 |
-| `sub_category` | 중분류 |
-| `tags` | 태그 (JSON 배열) |
+- **`articles` 테이블**: `id`, `url`(UNIQUE), `source`, `title`, `content`, `published_at`, `crawled_at`, `summary`, `major_category`, `sub_category`, `tags`
+- **`article_analysis` 테이블**: `id`, `article_id`(UNIQUE FK), `summary`, `major_category`, `sub_category`, `tags`(JSON 배열), `analyzed_at`
 
 ---
 
@@ -143,6 +136,7 @@ pip install -r requirements.txt
 |--------|------|
 | `httpx` | HTTP 요청 |
 | `beautifulsoup4` + `lxml` | HTML/XML 파싱 |
+| `trafilatura` | 웹페이지 기사 본문 정밀 추출 |
 | `APScheduler` | 정기 스케줄 실행 |
 | `google-genai` | Gemini API 클라이언트 |
 
