@@ -1,6 +1,8 @@
 import json
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Optional
 
@@ -36,6 +38,14 @@ class ArticleListResponse(BaseModel):
     total: int
     page: int
     size: int
+    articles: list[Article]
+
+
+class BriefingResponse(BaseModel):
+    generated_at: str
+    window_start: str
+    window_end: str
+    selection_method: str
     articles: list[Article]
 
 
@@ -317,3 +327,75 @@ def get_sources():
             "SELECT source, COUNT(*) as count FROM articles GROUP BY source ORDER BY count DESC"
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _article_time(value: Optional[str]) -> Optional[datetime]:
+    if not value or not value.strip():
+        return None
+    try:
+        result = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            result = parsedate_to_datetime(value)
+        except (ValueError, TypeError, OverflowError):
+            return None
+    if result.tzinfo is None:
+        # 크롤러의 datetime.now()로 저장된 시각은 한국 로컬 시각이다.
+        result = result.replace(tzinfo=timezone(timedelta(hours=9)))
+    try:
+        return result.astimezone(timezone.utc)
+    except (ValueError, OverflowError):
+        return None
+
+
+@app.get("/briefing", response_model=BriefingResponse, summary="오늘의 AI 브리핑", tags=["articles"])
+def get_briefing():
+    now = _utc_now()
+    start = now - timedelta(hours=24)
+    with _connect() as conn:
+        # 내용과 메타데이터는 기존 기사 API와 같은 보강 우선순위를 사용한다.
+        rows = conn.execute("""
+            SELECT a.id, a.url, a.source, a.title, a.content,
+                   a.published_at, a.crawled_at,
+                   COALESCE(aa.summary, a.summary) AS summary,
+                   COALESCE(aa.major_category, a.major_category) AS major_category,
+                   COALESCE(aa.sub_category, a.sub_category) AS sub_category,
+                   COALESCE(aa.tags, a.tags) AS tags
+            FROM articles a
+            LEFT JOIN article_analysis aa ON aa.article_id = a.id
+            WHERE COALESCE(aa.major_category, a.major_category) = ?
+        """, ("AI",)).fetchall()
+    candidates = []
+    for row in rows:
+        article = _row_to_dict(row)
+        published = _article_time(article["published_at"]) or _article_time(article["crawled_at"])
+        if published is not None and start <= published <= now:
+            candidates.append((article, published))
+    selected = []
+    sources, topics = set(), set()
+    while candidates and len(selected) < 5:
+        def priority(candidate):
+            article, published = candidate
+            topic = (article.get("sub_category") or "").strip()
+            return (bool(topic) and topic not in topics,
+                    article["source"] not in sources,
+                    bool((article.get("summary") or "").strip()),
+                    published, article["id"])
+        chosen = max(candidates, key=priority)
+        candidates.remove(chosen)
+        article = chosen[0]
+        selected.append(article)
+        sources.add(article["source"])
+        topics.add((article.get("sub_category") or "").strip())
+    return {
+        "generated_at": now.isoformat(),
+        "window_start": start.isoformat(),
+        "window_end": now.isoformat(),
+        "selection_method": "주제·출처 다양성, 요약 유무, 최신순을 반영한 규칙 기반 선정",
+        "articles": selected,
+    }
