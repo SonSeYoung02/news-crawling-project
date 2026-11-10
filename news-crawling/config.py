@@ -1,26 +1,6 @@
-import os
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "news.db"
-ENV_PATH = Path(__file__).parent / ".env"
-
-
-def _load_env_file() -> None:
-    if not ENV_PATH.exists():
-        return
-    for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
-
-
-_load_env_file()
-
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.5-flash"
-
 MAJOR_CATEGORIES = ["AI", "IT", "경제", "국제"]
 
 SCHEDULE_HOUR = 8

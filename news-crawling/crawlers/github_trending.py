@@ -122,7 +122,6 @@ def _parse_row(row: Any) -> dict[str, Any] | None:
         "crawled_at": datetime.now().isoformat(),
         "major_category": "AI",
         "sub_category": "오픈소스",
-        "translate_to_korean": True,
         "_is_ai": is_ai,
     }
 

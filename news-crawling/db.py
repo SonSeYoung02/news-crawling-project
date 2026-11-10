@@ -206,3 +206,25 @@ def save_articles_batch(articles: list[dict]) -> tuple[int, int]:
             skipped += 1
     logger.info("저장: %d건, 중복 건너뜀: %d건", saved, skipped)
     return saved, skipped
+
+
+def refresh_article_from_source(article: dict) -> bool:
+    """이미 수집한 URL도 출처에서 가져온 원문과 메타데이터로 갱신한다."""
+    with _connect() as conn:
+        try:
+            conn.execute("""
+                UPDATE articles
+                SET title = ?, content = CASE WHEN ? != '' AND (? = 0 OR COALESCE(content, '') = '') THEN ? ELSE content END,
+                    source = ?, published_at = ?, crawled_at = ?,
+                    major_category = ?, sub_category = ?, tags = ?
+                WHERE url = ?
+            """, (article.get("title", ""), article.get("content", ""), bool(article.get("content_is_fallback")), article.get("content", ""),
+                  article.get("source", ""), article.get("published_at"),
+                  article.get("crawled_at", datetime.now().isoformat()),
+                  article.get("major_category"), article.get("sub_category"),
+                  json.dumps(article.get("tags", []), ensure_ascii=False), article["url"]))
+            conn.commit()
+            return conn.execute("SELECT changes()").fetchone()[0] > 0
+        except sqlite3.Error as e:
+            logger.error("원문 갱신 실패 url=%s: %s", article.get("url"), e)
+            return False

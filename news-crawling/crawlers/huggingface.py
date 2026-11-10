@@ -67,7 +67,6 @@ def _fetch_blog_feed() -> list[dict[str, Any]]:
             "published_at": published_at,
             "crawled_at": datetime.now().isoformat(),
             "major_category": "AI",
-            "translate_to_korean": True,
         })
 
     return articles
@@ -102,7 +101,6 @@ def _fetch_papers() -> list[dict[str, Any]]:
             "published_at": datetime.now().isoformat(),
             "crawled_at": datetime.now().isoformat(),
             "major_category": "AI",
-            "translate_to_korean": True,
         })
         if len(articles) >= 10:
             break

@@ -47,7 +47,6 @@ def fetch() -> list[dict[str, Any]]:
                 "major_category": "AI",
                 "sub_category": "개발",
                 "tags": item.get("tag_list", [])[:10],
-                "translate_to_korean": True,
             })
     return articles
 

@@ -66,17 +66,18 @@ def _fetch_query(
             "html.parser",
         ).get_text(" ", strip=True)
 
-        content = _fetch_article_content(client, url, fallback)
+        full_content = _fetch_article_content(client, url, "")
+        content = full_content or fallback
 
         articles.append({
             "url": url,
             "source": "Google News",
             "title": title.get_text(strip=True),
             "content": content,
+            "content_is_fallback": not bool(full_content),
             "published_at": pub_date.get_text(strip=True) if pub_date else datetime.now().isoformat(),
             "crawled_at": datetime.now().isoformat(),
             "major_category": category,
-            "translate_to_korean": True,
         })
     return articles
 

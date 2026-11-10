@@ -49,7 +49,6 @@ def fetch() -> list[dict[str, Any]]:
             "published_at": _tag_text(entry, "published") or datetime.now().isoformat(),
             "crawled_at": datetime.now().isoformat(),
             "major_category": "AI",
-            "translate_to_korean": True,
         })
     return articles
 

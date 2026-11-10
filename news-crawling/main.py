@@ -19,107 +19,26 @@ def _safe_log_text(text: str) -> str:
     return text.encode(encoding, errors="replace").decode(encoding)
 
 
-def _has_korean(text: str) -> bool:
-    return any("\uac00" <= char <= "\ud7a3" for char in text)
-
-
 def run_pipeline() -> None:
     from crawlers import get_all_articles
-    from db import (
-        get_article_by_url,
-        get_article_id_by_url,
-        has_analysis,
-        init_db,
-        is_duplicate,
-        save_analysis,
-        save_article,
-        update_content_if_empty,
-    )
-    from llm.analyzer import classify, translate_article_to_korean
+    from db import init_db, is_duplicate, refresh_article_from_source, save_article
 
-    logger.info("=== 파이프라인 시작: %s ===", datetime.now().isoformat())
+    logger.info("=== 원문 수집 시작: %s ===", datetime.now().isoformat())
     init_db()
-
-    # 1. 크롤링
-    logger.info("뉴스 수집 중...")
     articles = get_all_articles()
-    logger.info("총 %d건 수집 완료", len(articles))
-
-    saved = skipped_dup = skipped_translation = 0
-
+    saved = refreshed = failed = 0
     for article in articles:
-        # 2. 중복 체크 (번역 전에 먼저 확인 — LLM 낭비 방지)
         if is_duplicate(article["url"]):
-            update_content_if_empty(article)
-            skipped_dup += 1
-            # 분석이 누락된 경우 기존 저장된 내용으로 재분석
-            article_id = get_article_id_by_url(article["url"])
-            if article_id and not has_analysis(article_id):
-                existing = get_article_by_url(article["url"])
-                if existing:
-                    dup_classification = classify(existing.get("title", ""), existing.get("content", ""))
-                    if dup_classification["major_category"] == "기타" and article.get("major_category"):
-                        dup_classification["major_category"] = article["major_category"]
-                    save_analysis(
-                        article_id=article_id,
-                        summary="",
-                        major_category=dup_classification["major_category"],
-                        sub_category=dup_classification.get("sub_category", ""),
-                        tags=dup_classification.get("tags", []),
-                    )
-                    logger.info("누락 분석 보완: %s", _safe_log_text(existing.get("title", "")[:40]))
-            continue
-
-        # 3. 번역 (실패해도 원문으로 계속 진행)
-        if article.get("translate_to_korean"):
-            translated = translate_article_to_korean(
-                article.get("title", ""),
-                article.get("content", ""),
-            )
-            if translated:
-                article["title"] = translated["title"]
-                article["content"] = translated["content"]
+            if refresh_article_from_source(article):
+                refreshed += 1
             else:
-                skipped_translation += 1
-                logger.warning(
-                    "번역 실패, 원문으로 저장: %s",
-                    _safe_log_text(article["title"][:40]),
-                )
-
-        # 4. articles 테이블에 저장
-        if not save_article(article):
-            skipped_dup += 1
-            continue
-
-        saved += 1
-        logger.info("저장: %s", _safe_log_text(article["title"][:40]))
-
-        # 5. 본문은 요약하지 않고 카테고리·태그만 분류
-        classification = classify(article.get("title", ""), article.get("content", ""))
-        if classification["major_category"] == "기타" and article.get("major_category"):
-            classification["major_category"] = article["major_category"]
-        if not classification["sub_category"] and article.get("sub_category"):
-            classification["sub_category"] = article["sub_category"]
-        if not classification["tags"] and article.get("tags"):
-            classification["tags"] = article["tags"]
-
-        # 6. 분류 결과 저장 (요약 필드는 호환성을 위해 비워 둔다)
-        article_id = get_article_id_by_url(article["url"])
-        if article_id:
-            ok = save_analysis(
-                article_id=article_id,
-                summary="",
-                major_category=classification["major_category"],
-                sub_category=classification.get("sub_category", ""),
-                tags=classification.get("tags", []),
-            )
-            if not ok:
-                logger.warning("분석 저장 실패: %s", _safe_log_text(article["title"][:40]))
-
-    logger.info(
-        "=== 파이프라인 완료 | 수집: %d | 저장: %d | 중복 건너뜀: %d | 번역 실패: %d ===",
-        len(articles), saved, skipped_dup, skipped_translation,
-    )
+                failed += 1
+        elif save_article(article):
+            saved += 1
+        else:
+            failed += 1
+    logger.info("=== 원문 수집 완료 | 수집: %d | 신규 저장: %d | 기존 갱신: %d | 실패: %d ===",
+                len(articles), saved, refreshed, failed)
 
 
 def run_scheduler() -> None:
@@ -147,7 +66,7 @@ def run_scheduler() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="한국어 뉴스 크롤링 + LLM 분석 파이프라인"
+        description="뉴스 원문 수집 파이프라인"
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--run", action="store_true", help="파이프라인 1회 즉시 실행")

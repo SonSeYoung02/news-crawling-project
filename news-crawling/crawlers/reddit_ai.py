@@ -84,7 +84,6 @@ def _fetch_feed(client: httpx.Client, feed_url: str) -> list[dict[str, Any]]:
             "crawled_at": datetime.now().isoformat(),
             "major_category": "AI",
             "sub_category": "커뮤니티",
-            "translate_to_korean": True,
         })
 
         if len(items) >= 5:
