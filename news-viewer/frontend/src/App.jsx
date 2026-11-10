@@ -316,6 +316,9 @@ const s = {
     padding: "40px 0",
     fontSize: 14,
   },
+  briefingHeader: { padding: "20px 16px", borderBottom: `1px solid ${BORDER}`, background: ACCENT_LIGHT },
+  briefingTitle: { margin: "0 0 8px", fontSize: 20, color: "#0f172a" },
+  briefingDescription: { margin: "0 0 10px", fontSize: 13, lineHeight: 1.6, color: TEXT_SECONDARY },
   compactLayout: { flexDirection: "column" },
   compactSidebar: { width: "100%", flexShrink: 0, borderRight: "none", borderBottom: `1px solid ${BORDER}` },
   compactHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 16px", borderBottom: "none" },
@@ -331,6 +334,11 @@ const s = {
 };
 
 export default function App() {
+  const [view, setView] = useState("briefing");
+  const [briefing, setBriefing] = useState(null);
+  const [briefingLoading, setBriefingLoading] = useState(true);
+  const [briefingError, setBriefingError] = useState("");
+  const [briefingRetry, setBriefingRetry] = useState(0);
   const [articles, setArticles] = useState([]);
   const [categories, setCategories] = useState([]);
   const [sources, setSources] = useState([]);
@@ -349,6 +357,21 @@ export default function App() {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const SIZE = 20;
+
+  useEffect(() => {
+    if (view !== "briefing") return;
+    const controller = new AbortController();
+    setSelected(null);
+    setBriefingLoading(true);
+    setBriefingError("");
+    fetchJSON("/briefing", controller.signal)
+      .then(setBriefing)
+      .catch(() => {
+        if (!controller.signal.aborted) setBriefingError("브리핑을 불러오지 못했습니다.");
+      })
+      .finally(() => { if (!controller.signal.aborted) setBriefingLoading(false); });
+    return () => controller.abort();
+  }, [view, briefingRetry]);
 
   useEffect(() => {
     const media = window.matchMedia(COMPACT_QUERY);
@@ -380,7 +403,7 @@ export default function App() {
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    setSelected(null);
+    if (view === "articles") setSelected(null);
     const params = new URLSearchParams({ page, size: SIZE });
     if (selectedCategory) params.set("category", selectedCategory);
     if (selectedSource) params.set("source", selectedSource);
@@ -402,10 +425,10 @@ export default function App() {
   }, [page, selectedCategory, selectedSource, search]);
 
   useEffect(() => {
-    if (!isCompact && !loading && !selected && articles.length > 0) {
+    if (view === "articles" && !isCompact && !loading && !selected && articles.length > 0) {
       setSelected(articles[0]);
     }
-  }, [articles, loading, selected, isCompact]);
+  }, [articles, loading, selected, isCompact, view]);
 
   const totalPages = Math.ceil(total / SIZE);
   const categoryItems = [
@@ -421,6 +444,7 @@ export default function App() {
   ];
 
   const handleCategoryClick = (cat) => {
+    setView("articles");
     setFiltersOpen(false);
     setSelectedCategory(cat);
     setSelectedSource("");
@@ -429,6 +453,7 @@ export default function App() {
   };
 
   const handleSourceClick = (src) => {
+    setView("articles");
     setFiltersOpen(false);
     setSelectedSource(src);
     setSelectedCategory("");
@@ -452,6 +477,10 @@ export default function App() {
           )}
         </div>
         <div id="news-filters" hidden={isCompact && !filtersOpen} style={{ ...s.sidebarScroll, ...(isCompact ? s.compactFilters : {}) }}>
+          <div style={s.sectionLabel}>보기</div>
+          {[{ id: "briefing", label: "오늘의 AI 브리핑" }, { id: "articles", label: "전체 기사" }].map((item) => (
+            <button key={item.id} type="button" aria-pressed={view === item.id} style={{ ...s.filterItem(view === item.id), ...s.filterControl }} onClick={() => { setView(item.id); setSelected(null); setFiltersOpen(false); }}>{item.label}</button>
+          ))}
           <div style={{ ...s.sectionLabel, marginTop: 4 }}>카테고리</div>
           {categoryItems.map((c) => (
             <button
@@ -491,13 +520,13 @@ export default function App() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") { setSearch(query); setPage(1); setSelected(null); }
+              if (e.key === "Enter") { setView("articles"); setSearch(query); setPage(1); setSelected(null); }
             }}
             placeholder="기사 제목, 요약으로 검색..."
             style={s.searchInput}
           />
           <button
-            onClick={() => { setSearch(query); setPage(1); setSelected(null); }}
+            onClick={() => { setView("articles"); setSearch(query); setPage(1); setSelected(null); }}
             style={{ ...s.searchBtn, ...s.touchButton }}
           >
             검색
@@ -509,11 +538,23 @@ export default function App() {
         <div style={s.content}>
           {/* Article List */}
           <div aria-label="기사 목록" style={{ ...s.listPanel, ...(isCompact ? s.compactList : {}), ...(isCompact && selected ? { display: "none" } : {}) }}>
-            {loading && <div style={s.statusText}>불러오는 중...</div>}
-            {!loading && !error && articles.length === 0 && (
+            {view === "briefing" && (
+              <section aria-label="오늘의 AI 브리핑" style={s.briefingHeader}>
+                <h2 style={s.briefingTitle}>오늘의 AI 브리핑</h2>
+                <p style={s.briefingDescription}>최근 24시간의 AI 소식 최대 5개를 모았습니다.</p>
+                <p style={s.briefingDescription}>주제·출처 다양성과 요약 유무, 최신순을 반영한 선정입니다.</p>
+                {briefing && <p style={s.briefingDescription}>조회 시각: {new Date(briefing.generated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} (한국 시간)</p>}
+                <button type="button" style={s.filterButton} disabled={briefingLoading} onClick={() => setBriefingRetry((n) => n + 1)}>새로고침</button>
+              </section>
+            )}
+            {view === "briefing" && briefingLoading && <div role="status" style={s.statusText}>브리핑을 불러오는 중...</div>}
+            {view === "briefing" && briefingError && <div role="alert" style={s.error}>{briefingError} <button type="button" style={s.filterButton} onClick={() => setBriefingRetry((n) => n + 1)}>다시 시도</button></div>}
+            {view === "briefing" && !briefingLoading && !briefingError && briefing?.articles.length === 0 && <div style={s.statusText}>최근 24시간에 수집된 AI 기사가 없습니다.</div>}
+            {view === "articles" && loading && <div style={s.statusText}>불러오는 중...</div>}
+            {view === "articles" && !loading && !error && articles.length === 0 && (
               <div style={s.statusText}>기사가 없습니다</div>
             )}
-            {!loading && articles.map((a) => (
+            {(view === "briefing" ? (!briefingLoading && !briefingError ? briefing?.articles || [] : []) : (!loading ? articles : [])).map((a) => (
               <button
                 type="button"
                 key={a.id}
@@ -542,7 +583,7 @@ export default function App() {
               </button>
             ))}
 
-            {totalPages > 1 && (
+            {view === "articles" && totalPages > 1 && (
               <div style={s.pagination}>
                 <button
                   onClick={() => { setSelected(null); setPage((p) => Math.max(1, p - 1)); }}
