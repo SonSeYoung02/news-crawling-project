@@ -35,7 +35,7 @@ def run_pipeline() -> None:
         save_article,
         update_content_if_empty,
     )
-    from llm.analyzer import classify, summarize, translate_article_to_korean
+    from llm.analyzer import classify, translate_article_to_korean
 
     logger.info("=== 파이프라인 시작: %s ===", datetime.now().isoformat())
     init_db()
@@ -57,13 +57,12 @@ def run_pipeline() -> None:
             if article_id and not has_analysis(article_id):
                 existing = get_article_by_url(article["url"])
                 if existing:
-                    dup_summary = summarize(existing.get("content", ""))
                     dup_classification = classify(existing.get("title", ""), existing.get("content", ""))
                     if dup_classification["major_category"] == "기타" and article.get("major_category"):
                         dup_classification["major_category"] = article["major_category"]
                     save_analysis(
                         article_id=article_id,
-                        summary=dup_summary,
+                        summary="",
                         major_category=dup_classification["major_category"],
                         sub_category=dup_classification.get("sub_category", ""),
                         tags=dup_classification.get("tags", []),
@@ -95,10 +94,7 @@ def run_pipeline() -> None:
         saved += 1
         logger.info("저장: %s", _safe_log_text(article["title"][:40]))
 
-        # 5. LLM 요약
-        summary = summarize(article.get("content", ""))
-
-        # 6. LLM 분류
+        # 5. 본문은 요약하지 않고 카테고리·태그만 분류
         classification = classify(article.get("title", ""), article.get("content", ""))
         if classification["major_category"] == "기타" and article.get("major_category"):
             classification["major_category"] = article["major_category"]
@@ -107,12 +103,12 @@ def run_pipeline() -> None:
         if not classification["tags"] and article.get("tags"):
             classification["tags"] = article["tags"]
 
-        # 7. article_analysis 테이블에 저장
+        # 6. 분류 결과 저장 (요약 필드는 호환성을 위해 비워 둔다)
         article_id = get_article_id_by_url(article["url"])
         if article_id:
             ok = save_analysis(
                 article_id=article_id,
-                summary=summary,
+                summary="",
                 major_category=classification["major_category"],
                 sub_category=classification.get("sub_category", ""),
                 tags=classification.get("tags", []),

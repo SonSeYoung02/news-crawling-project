@@ -1,6 +1,8 @@
+> 현재 동작: 기사별 AI 요약은 생성하지 않습니다. 신규 수집과 누락 분석 보완 모두 번역·분류만 수행합니다. 기존 summary 데이터는 호환성을 위해 보존하며 신규 분석의 summary는 빈 문자열입니다.
+
 # AI·IT 뉴스 크롤링 + LLM 분석 파이프라인
 
-네이버뉴스, Google News, GeekNews, Reddit AI, GitHub Trending, Hugging Face, arXiv, dev.to에서 최신 뉴스를 수집하고 Gemini AI로 한국어 번역·요약·분류하여 SQLite에 저장하는 파이프라인입니다.
+네이버뉴스, Google News, GeekNews, Reddit AI, GitHub Trending, Hugging Face, arXiv, dev.to에서 최신 뉴스를 수집하고 Gemini AI로 한국어 번역·분류하여 SQLite에 저장하는 파이프라인입니다.
 
 ---
 
@@ -34,7 +36,7 @@ news-crawling/
 │   ├── devto.py             # dev.to API 크롤러
 │   └── _rss.py              # RSS 공통 파서
 ├── llm/
-│   └── analyzer.py          # Gemini API 번역·요약·분류
+│   └── analyzer.py          # Gemini API 번역·분류
 ├── news.db                  # SQLite DB (실행 후 생성)
 ├── pipeline.log             # 실행 로그 (실행 후 생성)
 └── requirements.txt
@@ -72,12 +74,12 @@ news-crawling/
      └─────────────────────┬─────────────────────┘
                            │ 신규 기사 (또는 분석 누락 기사 보완)
                            │
-                 ③ LLM 번역 · 요약 · 분류
+                 ③ LLM 번역 · 분류
                            │
      ┌─────────────────────▼─────────────────────┐
      │              llm/analyzer.py              │
      │   translate_article_to_korean()           │
-     │   summarize() / classify()                │
+     │   classify()                              │
      │            (Gemini 2.5 Flash)             │
      └─────────────────────┬─────────────────────┘
                            │
@@ -106,7 +108,7 @@ news-crawling/
 ### LLM 분석 내용
 
 - **번역**: 해외 영문 기사(`translate_to_korean: True`)의 제목과 본문을 한국어로 번역
-- **요약**: 기사 본문을 3~5문장으로 요약 (본문 최대 3,000자 사용)
+- **본문 보존**: 기사별 AI 요약은 생성하지 않으며 수집 본문(해외 기사 번역본 포함)을 제공합니다.
 - **대분류**: `AI` / `IT` / `경제` / `국제`
 - **중분류**: 세부 주제 (예: LLM, 오픈소스, 반도체, 거시경제)
 - **태그**: 키워드 최대 10개
