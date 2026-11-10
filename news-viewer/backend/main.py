@@ -213,7 +213,7 @@ def get_articles(
     size: int = Query(20, ge=1, le=100, description="페이지당 기사 수 (최대 100)"),
     category: Optional[str] = Query(None, description="대분류 필터 (예: IT/과학, 경제)"),
     source: Optional[str] = Query(None, description="출처 필터 (예: devto, google_news)"),
-    q: Optional[str] = Query(None, description="제목 또는 요약 전문 검색어"),
+    q: Optional[str] = Query(None, description="제목 또는 본문 검색어"),
 ):
     offset = (page - 1) * size
     conditions = []
@@ -226,7 +226,7 @@ def get_articles(
         conditions.append("a.source = ?")
         params.append(source)
     if q:
-        conditions.append("(a.title LIKE ? OR COALESCE(aa.summary, a.summary) LIKE ?)")
+        conditions.append("(a.title LIKE ? OR a.content LIKE ?)")
         params.extend([f"%{q}%", f"%{q}%"])
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
@@ -384,7 +384,6 @@ def get_briefing():
             topic = (article.get("sub_category") or "").strip()
             return (bool(topic) and topic not in topics,
                     article["source"] not in sources,
-                    bool((article.get("summary") or "").strip()),
                     published, article["id"])
         chosen = max(candidates, key=priority)
         candidates.remove(chosen)
@@ -396,6 +395,6 @@ def get_briefing():
         "generated_at": now.isoformat(),
         "window_start": start.isoformat(),
         "window_end": now.isoformat(),
-        "selection_method": "주제·출처 다양성, 요약 유무, 최신순을 반영한 규칙 기반 선정",
+        "selection_method": "주제·출처 다양성, 최신순을 반영한 규칙 기반 선정",
         "articles": selected,
     }

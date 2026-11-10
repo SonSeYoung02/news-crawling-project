@@ -72,5 +72,19 @@ class BriefingTests(unittest.TestCase):
         self.add(1, 'Tue, 10 Nov 2026 11:00:00 +0900')
         self.assertEqual([a['id'] for a in self.result()['articles']], [1])
 
+    def test_search_uses_body_not_legacy_ai_summary(self):
+        from fastapi.testclient import TestClient
+        self.add(1)
+        client = TestClient(main.app)
+        self.assertEqual(client.get('/articles', params={'q':'본문'}).json()['total'], 1)
+        self.assertEqual(client.get('/articles', params={'q':'요약'}).json()['total'], 0)
+
+    def test_legacy_summary_does_not_affect_ranking(self):
+        self.add(1, '2026-11-10T01:00:00Z')
+        self.add(2, '2026-11-10T02:00:00Z')
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute('UPDATE articles SET summary = NULL WHERE id = 2')
+        self.assertEqual(self.result()['articles'][0]['id'], 2)
+
 if __name__ == '__main__': unittest.main()
 
