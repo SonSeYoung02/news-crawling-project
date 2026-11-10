@@ -26,13 +26,6 @@ async function fetchJSON(path, signal) {
   return response.json();
 }
 
-const cleanArticleText = (text = "") =>
-  text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.includes("\uad11\uace0"))
-    .join("\n");
-
 const s = {
   layout: {
     display: "flex",
@@ -282,27 +275,6 @@ const s = {
     color: ACCENT,
     fontWeight: 500,
   },
-  summaryBox: {
-    background: ACCENT_LIGHT,
-    border: `1px solid #ddd6fe`,
-    borderLeft: `4px solid ${ACCENT}`,
-    borderRadius: 10,
-    padding: "14px 18px",
-    marginBottom: 24,
-  },
-  summaryLabel: {
-    fontSize: 11,
-    color: ACCENT,
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: "0.5px",
-    marginBottom: 8,
-  },
-  summaryText: {
-    fontSize: 14,
-    lineHeight: 1.75,
-    color: "#374151",
-  },
   detailContent: {
     fontSize: 15,
     lineHeight: 1.85,
@@ -522,7 +494,7 @@ export default function App() {
             onKeyDown={(e) => {
               if (e.key === "Enter") { setView("articles"); setSearch(query); setPage(1); setSelected(null); }
             }}
-            placeholder="기사 제목, 요약으로 검색..."
+            placeholder="기사 제목, 본문으로 검색..."
             style={s.searchInput}
           />
           <button
@@ -542,7 +514,7 @@ export default function App() {
               <section aria-label="오늘의 AI 브리핑" style={s.briefingHeader}>
                 <h2 style={s.briefingTitle}>오늘의 AI 브리핑</h2>
                 <p style={s.briefingDescription}>최근 24시간의 AI 소식 최대 5개를 모았습니다.</p>
-                <p style={s.briefingDescription}>주제·출처 다양성과 요약 유무, 최신순을 반영한 선정입니다.</p>
+                <p style={s.briefingDescription}>주제·출처 다양성과 최신순을 반영한 선정입니다.</p>
                 {briefing && <p style={s.briefingDescription}>조회 시각: {new Date(briefing.generated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} (한국 시간)</p>}
                 <button type="button" style={s.filterButton} disabled={briefingLoading} onClick={() => setBriefingRetry((n) => n + 1)}>새로고침</button>
               </section>
@@ -568,9 +540,9 @@ export default function App() {
                   <span>{a.major_category}</span>
                 </div>
                 <div style={s.cardTitle}>{a.title}</div>
-                {a.summary && (
+                {a.content && (
                   <div style={s.cardSummary}>
-                    {a.summary.slice(0, 90)}…
+                    {a.content.slice(0, 90)}{a.content.length > 90 ? "…" : ""}
                   </div>
                 )}
                 {(a.tags || []).length > 0 && (
@@ -636,14 +608,8 @@ export default function App() {
                     </>
                   )}
                 </div>
-                {selected.summary && (
-                  <div style={s.summaryBox}>
-                    <div style={s.summaryLabel}>LLM 분석</div>
-                    <div style={s.summaryText}>{selected.summary}</div>
-                  </div>
-                )}
                 <div style={s.detailContent}>
-                  {cleanArticleText(selected.content) || "이 기사는 원문 본문을 가져오지 못했습니다."}
+                  {selected.content || "이 기사는 본문을 가져오지 못했습니다. 원문 보기에서 확인해 주세요."}
                 </div>
                 {(selected.tags || []).length > 0 && (
                   <div style={s.tagRow}>
