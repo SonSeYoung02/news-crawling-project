@@ -220,7 +220,7 @@ def get_articles(
     params: list = []
 
     if category:
-        conditions.append("COALESCE(aa.major_category, a.major_category) = ?")
+        conditions.append("a.major_category = ?")
         params.append(category)
     if source:
         conditions.append("a.source = ?")
@@ -233,7 +233,6 @@ def get_articles(
 
     base_query = f"""
         FROM articles a
-        LEFT JOIN article_analysis aa ON aa.article_id = a.id
         {where}
     """
 
@@ -244,10 +243,10 @@ def get_articles(
             SELECT
                 a.id, a.url, a.source, a.title, a.content,
                 a.published_at, a.crawled_at,
-                COALESCE(aa.summary, a.summary) AS summary,
-                COALESCE(aa.major_category, a.major_category) AS major_category,
-                COALESCE(aa.sub_category, a.sub_category) AS sub_category,
-                COALESCE(aa.tags, a.tags) AS tags
+                a.summary AS summary,
+                a.major_category AS major_category,
+                a.sub_category AS sub_category,
+                a.tags AS tags
             {base_query}
             ORDER BY a.crawled_at DESC LIMIT ? OFFSET ?
             """,
@@ -276,12 +275,11 @@ def get_article(article_id: int):
             SELECT
                 a.id, a.url, a.source, a.title, a.content,
                 a.published_at, a.crawled_at,
-                COALESCE(aa.summary, a.summary) AS summary,
-                COALESCE(aa.major_category, a.major_category) AS major_category,
-                COALESCE(aa.sub_category, a.sub_category) AS sub_category,
-                COALESCE(aa.tags, a.tags) AS tags
+                a.summary AS summary,
+                a.major_category AS major_category,
+                a.sub_category AS sub_category,
+                a.tags AS tags
             FROM articles a
-            LEFT JOIN article_analysis aa ON aa.article_id = a.id
             WHERE a.id = ?
             """,
             (article_id,),
@@ -302,12 +300,11 @@ def get_categories():
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT COALESCE(aa.major_category, a.major_category) AS major_category,
+            SELECT a.major_category AS major_category,
                    COUNT(*) as count
             FROM articles a
-            LEFT JOIN article_analysis aa ON aa.article_id = a.id
-            WHERE COALESCE(aa.major_category, a.major_category) IS NOT NULL
-            GROUP BY COALESCE(aa.major_category, a.major_category)
+            WHERE a.major_category IS NOT NULL
+            GROUP BY a.major_category
             ORDER BY count DESC
             """
         ).fetchall()
@@ -358,17 +355,16 @@ def get_briefing():
     now = _utc_now()
     start = now - timedelta(hours=24)
     with _connect() as conn:
-        # 내용과 메타데이터는 기존 기사 API와 같은 보강 우선순위를 사용한다.
+        # 내용과 메타데이터는 수집한 원문 데이터만 사용한다.
         rows = conn.execute("""
             SELECT a.id, a.url, a.source, a.title, a.content,
                    a.published_at, a.crawled_at,
-                   COALESCE(aa.summary, a.summary) AS summary,
-                   COALESCE(aa.major_category, a.major_category) AS major_category,
-                   COALESCE(aa.sub_category, a.sub_category) AS sub_category,
-                   COALESCE(aa.tags, a.tags) AS tags
+                   a.summary AS summary,
+                   a.major_category AS major_category,
+                   a.sub_category AS sub_category,
+                   a.tags AS tags
             FROM articles a
-            LEFT JOIN article_analysis aa ON aa.article_id = a.id
-            WHERE COALESCE(aa.major_category, a.major_category) = ?
+            WHERE a.major_category = ?
         """, ("AI",)).fetchall()
     candidates = []
     for row in rows:

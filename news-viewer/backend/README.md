@@ -81,7 +81,7 @@ uvicorn main:app --reload
 | `size` | int | 20 | 페이지당 기사 수 (1~100) |
 | `category` | string | - | 대분류 카테고리 필터 |
 | `source` | string | - | 출처(언론사) 필터 |
-| `q` | string | - | 제목 또는 요약 내 검색어 |
+| `q` | string | - | 제목 또는 본문 내 검색어 |
 
 **응답 예시**
 
@@ -233,9 +233,11 @@ app.add_middleware(
 - 발행일 우선이며 누락·파싱 실패 시 수집일을 사용합니다. 시간대 없는 시각은 한국 시간으로 해석합니다. ISO 8601과 RFC 2822 날짜를 지원합니다.
 - 조회 시작·끝 경계를 포함하고 미래·오래된 기사는 제외합니다. 대상이 없으면 빈 배열이며 과거 기사로 채우지 않습니다.
 - 주제 다양성 → 출처 다양성 → 최신순 → ID 역순으로 최대 5개를 선택합니다. 규칙 기반 선정이며 객관적 중요도 순위를 의미하지 않습니다.
-- 기존 분석 결과를 우선 사용하며 LLM 호출과 DB 쓰기는 없습니다.
+- 수집 원문 및 수집기 메타데이터만 사용하며 LLM 호출과 DB 쓰기는 없습니다.
 
 검증: `python -m unittest test_briefing -v` (FastAPI 설치 필요).
 `requirements-dev.txt`로 테스트 의존성을 설치할 수 있습니다: `python -m pip install -r requirements-dev.txt`.
 
 기사 검색은 제목과 본문을 대상으로 합니다. 기존 summary 필드는 API 호환성을 위해 유지하지만 브리핑 선정에는 사용하지 않습니다.
+
+Gemini 분석을 사용하지 않습니다. article_analysis를 조인하지 않고 articles에서 직접 조회합니다. 기존 API summary 필드는 호환성을 위해 유지합니다.

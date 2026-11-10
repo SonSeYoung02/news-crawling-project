@@ -41,7 +41,7 @@ class BriefingTests(unittest.TestCase):
         self.add(6, 'invalid', 'invalid')
         self.add(7, '2026-11-10T12:00:00')
         self.assertEqual({a['id'] for a in self.result()['articles']}, {1,3,7})
-    def test_limit_diversity_and_enriched_fields(self):
+    def test_limit_diversity_and_source_metadata(self):
         for i in range(1, 8): self.add(i)
         self.add(8, source='Hugging Face', topic='로보틱스')
         with closing(sqlite3.connect(self.db)) as c, c:
@@ -49,8 +49,8 @@ class BriefingTests(unittest.TestCase):
         items = self.result()['articles']
         self.assertEqual(len(items), 5)
         item = next(a for a in items if a['id'] == 8)
-        self.assertEqual(item['summary'], '보강 요약')
-        self.assertEqual(item['tags'], ['robot'])
+        self.assertEqual(item['summary'], '요약')
+        self.assertEqual(item['tags'], [])
         main.BriefingResponse(**self.result())
     def test_invalid_publication_uses_crawl_but_old_publication_does_not(self):
         self.add(1, 'bad')
