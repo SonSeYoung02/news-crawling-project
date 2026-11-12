@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const API = "/api";
 const COMPACT_QUERY = "(max-width: 1023px)";
@@ -231,6 +231,13 @@ const s = {
     minWidth: 60,
     textAlign: "center",
   },
+  readerContainer: {
+    maxWidth: 820,
+    width: "100%",
+    margin: "0 auto",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+  },
   detailPanel: {
     flex: 1,
     minWidth: 0,
@@ -263,12 +270,14 @@ const s = {
     flexWrap: "wrap",
   },
   detailTitle: {
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: 700,
-    lineHeight: 1.4,
+    lineHeight: 1.35,
     marginBottom: 14,
     color: "#0f172a",
-    letterSpacing: "-0.3px",
+    letterSpacing: "-0.02em",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
   },
   detailDate: {
     fontSize: 12,
@@ -287,8 +296,8 @@ const s = {
     border: `1px solid #ddd6fe`,
     borderLeft: `4px solid ${ACCENT}`,
     borderRadius: 10,
-    padding: "14px 18px",
-    marginBottom: 24,
+    padding: "16px 20px",
+    marginBottom: 28,
   },
   summaryLabel: {
     fontSize: 11,
@@ -299,16 +308,18 @@ const s = {
     marginBottom: 8,
   },
   summaryText: {
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 1.75,
     color: "#374151",
   },
   detailContent: {
-    fontSize: 15,
-    lineHeight: 1.85,
+    fontSize: 17,
+    lineHeight: 1.82,
     color: "#374151",
     whiteSpace: "pre-wrap",
-    marginBottom: 28,
+    marginBottom: 32,
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
   },
   statusText: {
     textAlign: "center",
@@ -321,12 +332,49 @@ const s = {
   compactHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 16px", borderBottom: "none" },
   compactFilters: { maxHeight: "40dvh", padding: "0 12px 12px" },
   compactTopbar: { padding: "10px 12px", gap: 8 },
+  compactReadingHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "8px 14px",
+    borderBottom: `1px solid ${BORDER}`,
+    background: "#ffffff",
+    minHeight: 52,
+    gap: 12,
+    flexShrink: 0,
+  },
+  compactReadingMeta: {
+    fontSize: 13,
+    color: TEXT_SECONDARY,
+    fontWeight: 500,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
   compactList: { width: "100%", minWidth: 0, flex: 1, borderRight: "none" },
   compactDetail: { width: "100%", padding: "20px 16px", flex: 1 },
+  compactDetailTitle: { fontSize: 22, lineHeight: 1.35 },
   filterButton: { minHeight: 44, padding: "8px 12px", border: `1px solid ${BORDER}`, borderRadius: 8, background: "#fff", color: ACCENT, font: "inherit", cursor: "pointer", flexShrink: 0 },
   filterControl: { width: "100%", minHeight: 44, border: "none", fontFamily: "inherit", textAlign: "left" },
   touchButton: { minHeight: 44 },
-  backButton: { minHeight: 44, marginBottom: 16, padding: "8px 12px", border: `1px solid ${BORDER}`, borderRadius: 8, background: "#fff", color: ACCENT, font: "inherit", cursor: "pointer" },
+  backButton: {
+    minHeight: 44,
+    minWidth: 44,
+    padding: "8px 14px",
+    border: `1px solid ${BORDER}`,
+    borderRadius: 8,
+    background: "#ffffff",
+    color: ACCENT,
+    font: "inherit",
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
   error: { padding: "12px 16px", color: "#991b1b", background: "#fef2f2", fontSize: 14, flexShrink: 0 },
 };
 
@@ -347,8 +395,31 @@ export default function App() {
   const [metadataError, setMetadataError] = useState("");
   const [isCompact, setIsCompact] = useState(() => window.matchMedia(COMPACT_QUERY).matches);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const listRef = useRef(null);
+  const listScrollPos = useRef(0);
 
   const SIZE = 20;
+
+  const handleSelectArticle = (article) => {
+    if (listRef.current) {
+      listScrollPos.current = listRef.current.scrollTop;
+    }
+    setSelected(article);
+  };
+
+  const handleBackToList = () => {
+    setSelected(null);
+  };
+
+  useEffect(() => {
+    if (!selected && isCompact && listRef.current && listScrollPos.current > 0) {
+      requestAnimationFrame(() => {
+        if (listRef.current) {
+          listRef.current.scrollTop = listScrollPos.current;
+        }
+      });
+    }
+  }, [selected, isCompact]);
 
   useEffect(() => {
     const media = window.matchMedia(COMPACT_QUERY);
@@ -426,6 +497,7 @@ export default function App() {
     setSelectedSource("");
     setPage(1);
     setSelected(null);
+    listScrollPos.current = 0;
   };
 
   const handleSourceClick = (src) => {
@@ -434,12 +506,13 @@ export default function App() {
     setSelectedCategory("");
     setPage(1);
     setSelected(null);
+    listScrollPos.current = 0;
   };
 
   return (
     <div style={{ ...s.layout, ...(isCompact ? s.compactLayout : {}) }}>
       {/* Sidebar */}
-      <aside style={{ ...s.sidebar, ...(isCompact ? s.compactSidebar : {}) }}>
+      <aside style={{ ...s.sidebar, ...(isCompact ? s.compactSidebar : {}), ...(isCompact && selected ? { display: "none" } : {}) }}>
         <div style={{ ...s.sidebarHeader, ...(isCompact ? s.compactHeader : {}) }}>
           <div>
             <div style={s.sidebarTitle}>📰 뉴스 뷰어</div>
@@ -484,20 +557,47 @@ export default function App() {
 
       {/* Main */}
       <main style={s.main}>
+        {/* Compact Reading Header (Mobile Detail Only) */}
+        {isCompact && selected && (
+          <header style={s.compactReadingHeader}>
+            <button
+              type="button"
+              style={s.backButton}
+              onClick={handleBackToList}
+              aria-label="기사 목록으로 돌아가기"
+            >
+              ← 목록
+            </button>
+            <span style={s.compactReadingMeta}>
+              {selected.source} · {selected.major_category}
+            </span>
+          </header>
+        )}
+
         {/* Topbar */}
-        <div style={{ ...s.topbar, ...(isCompact ? s.compactTopbar : {}) }}>
+        <div style={{ ...s.topbar, ...(isCompact ? s.compactTopbar : {}), ...(isCompact && selected ? { display: "none" } : {}) }}>
           <input
             aria-label="기사 검색"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") { setSearch(query); setPage(1); setSelected(null); }
+              if (e.key === "Enter") {
+                setSearch(query);
+                setPage(1);
+                setSelected(null);
+                listScrollPos.current = 0;
+              }
             }}
             placeholder="기사 제목, 요약으로 검색..."
             style={s.searchInput}
           />
           <button
-            onClick={() => { setSearch(query); setPage(1); setSelected(null); }}
+            onClick={() => {
+              setSearch(query);
+              setPage(1);
+              setSelected(null);
+              listScrollPos.current = 0;
+            }}
             style={{ ...s.searchBtn, ...s.touchButton }}
           >
             검색
@@ -508,7 +608,7 @@ export default function App() {
 
         <div style={s.content}>
           {/* Article List */}
-          <div aria-label="기사 목록" style={{ ...s.listPanel, ...(isCompact ? s.compactList : {}), ...(isCompact && selected ? { display: "none" } : {}) }}>
+          <div ref={listRef} aria-label="기사 목록" style={{ ...s.listPanel, ...(isCompact ? s.compactList : {}), ...(isCompact && selected ? { display: "none" } : {}) }}>
             {loading && <div style={s.statusText}>불러오는 중...</div>}
             {!loading && !error && articles.length === 0 && (
               <div style={s.statusText}>기사가 없습니다</div>
@@ -518,7 +618,7 @@ export default function App() {
                 type="button"
                 key={a.id}
                 aria-pressed={selected?.id === a.id}
-                onClick={() => setSelected(a)}
+                onClick={() => handleSelectArticle(a)}
                 style={s.card(selected?.id === a.id)}
               >
                 <div style={s.cardMeta}>
@@ -545,7 +645,11 @@ export default function App() {
             {totalPages > 1 && (
               <div style={s.pagination}>
                 <button
-                  onClick={() => { setSelected(null); setPage((p) => Math.max(1, p - 1)); }}
+                  onClick={() => {
+                    setSelected(null);
+                    setPage((p) => Math.max(1, p - 1));
+                    listScrollPos.current = 0;
+                  }}
                   disabled={page === 1}
                   style={{ ...s.pageBtn(page === 1), ...s.touchButton }}
                 >
@@ -553,7 +657,11 @@ export default function App() {
                 </button>
                 <span style={s.pageInfo}>{page} / {totalPages}</span>
                 <button
-                  onClick={() => { setSelected(null); setPage((p) => Math.min(totalPages, p + 1)); }}
+                  onClick={() => {
+                    setSelected(null);
+                    setPage((p) => Math.min(totalPages, p + 1));
+                    listScrollPos.current = 0;
+                  }}
                   disabled={page === totalPages}
                   style={{ ...s.pageBtn(page === totalPages), ...s.touchButton }}
                 >
@@ -570,8 +678,7 @@ export default function App() {
                 <span style={{ fontSize: 14 }}>기사를 선택하세요</span>
               </div>
             ) : (
-              <>
-                {isCompact && <button type="button" style={s.backButton} onClick={() => setSelected(null)}>← 목록으로</button>}
+              <div style={s.readerContainer}>
                 <div style={s.detailMeta}>
                   <span>{selected.source}</span>
                   <span>·</span>
@@ -583,7 +690,7 @@ export default function App() {
                     </>
                   )}
                 </div>
-                <h1 style={s.detailTitle}>{selected.title}</h1>
+                <h1 style={{ ...s.detailTitle, ...(isCompact ? s.compactDetailTitle : {}) }}>{selected.title}</h1>
                 <div style={s.detailDate}>
                   <span>{selected.published_at?.slice(0, 10)}</span>
                   {selected.url && (
@@ -611,7 +718,7 @@ export default function App() {
                     ))}
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>
