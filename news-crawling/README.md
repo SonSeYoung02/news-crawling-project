@@ -1,17 +1,16 @@
-# AI·IT 뉴스 크롤링 + LLM 분석 파이프라인
+# AI·IT 뉴스 크롤링 + Gemini 순차 번역 파이프라인
 
-네이버뉴스, Google News, GeekNews, Reddit AI, GitHub Trending, Hugging Face, arXiv, dev.to에서 최신 뉴스를 수집하고 Gemini AI로 한국어 번역·요약·분류하여 SQLite에 저장하는 파이프라인입니다.
+네이버뉴스, Google News, GeekNews, Reddit AI, GitHub Trending, Hugging Face, arXiv, dev.to에서 최신 뉴스를 수집하여 원문 그대로 SQLite에 우선 저장하고, 매일 새벽 시간대(01:00~06:00 KST)에 Google Gemini API 무료 티어를 통해 영문 기사의 제목과 본문을 한국어로 순차 번역하는 파이프라인입니다.
 
 ---
 
 ## 목차
 
 - [구조](#구조)
-- [동작 로직](#동작-로직)
-- [설치](#설치)
-- [설정](#설정)
+- [새벽 수집 및 번역 파이프라인 동작 로직](#새벽-수집-및-번역-파이프라인-동작-로직)
+- [설정 및 무료 티어 가이드](#설정-및-무료-티어-가이드)
 - [사용법](#사용법)
-- [DB 확인](#db-확인)
+- [데이터베이스 명세](#데이터베이스-명세)
 
 ---
 
@@ -19,13 +18,13 @@
 
 ```
 news-crawling/
-├── main.py                  # 진입점 (CLI)
-├── config.py                # 환경 설정 (API 키, DB 경로, 스케줄 등)
-├── db.py                    # SQLite 연결 및 저장 로직
-├── crawlers/
+├── main.py                  # 진입점 (CLI: --run / --schedule)
+├── config.py                # 환경 설정 (API 키, DB 경로, 스케줄, 무료 한도 등)
+├── db.py                    # SQLite 스키마 초기화 및 CRUD 로직
+├── crawlers/                # 뉴스 수집 어댑터
 │   ├── __init__.py          # 전체 소스 통합 (get_all_articles)
 │   ├── naver.py             # 네이버뉴스 크롤러 (HTML 파싱)
-│   ├── google_news.py       # Google News 글로벌 크롤러 (RSS)
+│   ├── google_news.py       # Google News 글로벌 크롤러 (RSS + trafilatura)
 │   ├── geeknews.py          # GeekNews 크롤러 (Atom/RSS)
 │   ├── reddit_ai.py         # Reddit AI 서브레딧 크롤러 (RSS)
 │   ├── github_trending.py   # GitHub Trending 오픈소스 크롤러 (HTML)
@@ -33,223 +32,87 @@ news-crawling/
 │   ├── arxiv.py             # arXiv API 크롤러
 │   ├── devto.py             # dev.to API 크롤러
 │   └── _rss.py              # RSS 공통 파서
-├── llm/
-│   └── analyzer.py          # Gemini API 번역·요약·분류
-├── news.db                  # SQLite DB (실행 후 생성)
-├── pipeline.log             # 실행 로그 (실행 후 생성)
-└── requirements.txt
+├── translation/             # 번역 파이프라인 모듈
+│   ├── __init__.py
+│   ├── queue.py             # 신규 우선 번역 대기열 생성 및 정렬
+│   ├── chunker.py           # 긴 본문 문단/문장 단위 분할
+│   ├── translator.py        # Gemini API 호출 및 조각별 재개(Resume)
+│   └── rate_limiter.py      # RPM/일일 쿼터 통제 및 05:55 마감 제어
+├── news.db                  # SQLite DB 파일
+├── pipeline.log             # 실행 로그 파일
+└── requirements.txt         # 파이썬 의존성
 ```
 
 ---
 
-## 동작 로직
+## 새벽 수집 및 번역 파이프라인 동작 로직
 
-```
-┌─────────────────────────────────────────────────────┐
-│                       main.py                       │
-│                    run_pipeline()                   │
-└──────────────────────────┬──────────────────────────┘
-                           │
-                 ① 뉴스 수집 (크롤링)
-                           │
-     ┌─────────────────────▼─────────────────────┐
-     │            crawlers/__init__.py           │
-     │             get_all_articles()            │
-     └─┬──────┬──────┬──────┬──────┬──────┬──────┘
-       │      │      │      │      │      │
-    네이버  Google  Geek   Reddit GitHub Hugging arXiv dev.to
-    (HTML)  (RSS)  (Atom)  (RSS)  (HTML)  (RSS)  (API) (API)
-       │      │      │      │      │      │      │     │
-       └──────┴──────┴──────┴──────┴──────┴──────┴─────┘
-                           │
-                           │ articles[]
-                           │
-                 ② 중복 필터링
-                           │
-     ┌─────────────────────▼─────────────────────┐
-     │                   db.py                   │
-     │             is_duplicate(url)             │
-     └─────────────────────┬─────────────────────┘
-                           │ 신규 기사 (또는 분석 누락 기사 보완)
-                           │
-                 ③ LLM 번역 · 요약 · 분류
-                           │
-     ┌─────────────────────▼─────────────────────┐
-     │              llm/analyzer.py              │
-     │   translate_article_to_korean()           │
-     │   summarize() / classify()                │
-     │            (Gemini 2.5 Flash)             │
-     └─────────────────────┬─────────────────────┘
-                           │
-                 ④ DB 저장
-                           │
-     ┌─────────────────────▼─────────────────────┐
-     │                   db.py                   │
-     │     save_article() / save_analysis()      │
-     │                  news.db                  │
-     └───────────────────────────────────────────┘
-```
-
-### 크롤러별 동작 방식
-
-| 소스 | 방식 | 수집 기준 | 기본 카테고리 |
-|------|------|-----------|:-------------:|
-| 네이버뉴스 | HTML 파싱 | IT/과학, 경제, 국제 섹션별 최대 5건 | `IT`/`경제`/`국제` |
-| Google News | RSS 파싱 | 글로벌 경제 및 AI/LLM 검색 피드별 최신 10건 | `경제`/`AI` |
-| GeekNews | Atom/RSS 파싱 | 긱뉴스 최신 기술/AI 토픽 최대 10건 | `AI` |
-| Reddit AI | RSS 파싱 | `r/LocalLLaMA`, `r/singularity` 핫 토픽 최대 10건 | `AI` |
-| GitHub Trending | HTML 파싱 | 일간 트렌딩 AI/LLM/Agent 오픈소스 저장소 최대 10건 | `AI` |
-| Hugging Face | RSS/HTML 파싱 | 공식 블로그 피드 및 Daily Papers 최신 10건 | `AI` |
-| arXiv | Atom API 파싱 | 지정 AI/CS 논문 메타데이터 및 초록 | `AI` |
-| dev.to | JSON API 파싱 | `ai` 태그 인기 기술 아티클 최신 10건 | `AI` |
-
-### LLM 분석 내용
-
-- **번역**: 해외 영문 기사(`translate_to_korean: True`)의 제목과 본문을 한국어로 번역
-- **요약**: 기사 본문을 3~5문장으로 요약 (본문 최대 3,000자 사용)
-- **대분류**: `AI` / `IT` / `경제` / `국제`
-- **중분류**: 세부 주제 (예: LLM, 오픈소스, 반도체, 거시경제)
-- **태그**: 키워드 최대 10개
-
-### DB 스키마 (`articles` 및 `article_analysis` 테이블)
-
-- **`articles` 테이블**: `id`, `url`(UNIQUE), `source`, `title`, `content`, `published_at`, `crawled_at`, `summary`, `major_category`, `sub_category`, `tags`
-- **`article_analysis` 테이블**: `id`, `article_id`(UNIQUE FK), `summary`, `major_category`, `sub_category`, `tags`(JSON 배열), `analyzed_at`
+1. **원문 수집 및 DB 즉시 저장 (01:00 KST)**:
+   - 8개 소스에서 기사를 수집하여 원문 그대로 `articles` 테이블에 우선 저장합니다.
+   - 이미 저장된 기사는 출처의 최신 정보로 갱신하며, 요약(`summarize`)이나 분류(`classify`) 호출은 전면 배제합니다.
+2. **번역 대기열 큐 생성 및 정렬**:
+   - 한국어 소스(네이버, GeekNews)는 번역 대상에서 제외합니다.
+   - **우선순위 1**: 당일 새로 수집된 신규 영어 기사.
+   - **우선순위 2**: 이전 실행의 미번역 영어 기사 및 원문 변경 기사.
+   - 각 그룹 내에서는 정규화된 발행시각 내림차순, 수집시각 내림차순, ID 오름차순으로 정렬합니다.
+3. **Gemini 순차 번역 및 조각별 저장 (01:00 ~ 05:55)**:
+   - 무료 API 한도(RPM, 일일 한도)를 준수하며 요청 간 간격을 제어합니다.
+   - 긴 기사는 문단 단위로 분할하여 개별 조각(chunk)을 번역 즉시 `translation_chunks`에 저장합니다.
+   - 한도 소진이나 네트워크 중단 시 다음 날 완료된 조각은 재호출 없이 미완료 조각부터 안전하게 이어받습니다.
+   - 제목과 모든 본문 조각이 완료된 후에만 `article_translations` 레코드를 `completed`로 전환합니다.
+4. **마감 시간 통제 (05:55 ~ 06:00)**:
+   - 매일 05:55 KST 이후에는 새로운 번역 요청을 시작하지 않습니다.
+   - 진행 중인 트랜잭션을 정리하고 06:00 이전에 프로세스를 정상 종료합니다.
 
 ---
 
-## 설치
+## 설정 및 무료 티어 가이드
 
-```bash
-# 1. 가상환경 생성 및 활성화
-python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # macOS/Linux
+`config.py` 또는 `.env` 파일을 통해 설정을 관리합니다.
 
-# 2. 의존성 설치
-pip install -r requirements.txt
+```env
+# Google Gemini API 키 (필수)
+GEMINI_API_KEY="your-api-key-here"
+
+# 무료 티어 모델 후보 설정
+GEMINI_MODEL="gemini-2.5-flash"
+REQUIRE_FREE_TIER=true
+
+# 무료 한도 통제 설정
+GEMINI_RPM_LIMIT=10
+GEMINI_DAILY_LIMIT=1000
+REQUEST_INTERVAL_SECONDS=6.0
+
+# 새벽 스케줄 및 마감 시간 설정 (KST 기준)
+SCHEDULE_HOUR=1
+SCHEDULE_MINUTE=0
+CUTOFF_HOUR=5
+CUTOFF_MINUTE=55
+DEADLINE_HOUR=6
+DEADLINE_MINUTE=0
 ```
 
-### 의존성
-
-| 패키지 | 용도 |
-|--------|------|
-| `httpx` | HTTP 요청 |
-| `beautifulsoup4` + `lxml` | HTML/XML 파싱 |
-| `trafilatura` | 웹페이지 기사 본문 정밀 추출 |
-| `APScheduler` | 정기 스케줄 실행 |
-| `google-genai` | Gemini API 클라이언트 |
-
----
-
-## 설정
-
-### 필수: Gemini API 키
-
-[Google AI Studio](https://aistudio.google.com)에서 발급 후 환경 변수로 설정합니다.
-
-```powershell
-# Windows PowerShell (세션 한정)
-$env:GEMINI_API_KEY = "your-api-key-here"
-
-# 영구 설정
-[System.Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "your-api-key-here", "User")
-```
-
-### 선택: `config.py` 수정
-
-```python
-SCHEDULE_HOUR   = 8     # 스케줄러 실행 시각 (시)
-SCHEDULE_MINUTE = 0     # 스케줄러 실행 시각 (분)
-GEMINI_MODEL    = "gemini-2.5-flash"   # 사용할 Gemini 모델
-REQUEST_TIMEOUT = 10    # HTTP 요청 타임아웃 (초)
-```
+> **주의**: Google AI Studio에서 무료 티어로 발급된 API 키와 프로젝트를 사용하십시오. 유료 결제 계정이 연결된 프로젝트는 자동 과금이 발생할 수 있으므로 주의해야 합니다.
 
 ---
 
 ## 사용법
 
-### 1회 즉시 실행
-
 ```bash
+# 1회 즉시 실행 (수집 및 순차 번역)
 python main.py --run
-```
 
-실행 흐름이 콘솔과 `pipeline.log`에 출력됩니다.
-
-```
-2026-05-14 08:00:00 [INFO] __main__: === 파이프라인 시작 ===
-2026-05-14 08:00:05 [INFO] __main__: 총 35건 수집 완료
-2026-05-14 08:00:06 [INFO] __main__: 분석 중: 삼성전자 2분기 실적 발표...
-...
-2026-05-14 08:01:30 [INFO] __main__: === 파이프라인 완료 | 수집: 35 | 중복: 5 | 저장: 30 ===
-```
-
-### 매일 자동 실행 (스케줄러)
-
-```bash
+# 새벽 01:00 KST 자동 스케줄러 실행
 python main.py --schedule
-```
-
-`config.py`의 `SCHEDULE_HOUR`/`SCHEDULE_MINUTE` 시각에 매일 자동 실행됩니다. 종료는 `Ctrl+C`.
-
-### 크롤러만 단독 테스트 (API 키 없이)
-
-```bash
-python -c "from crawlers import get_all_articles; arts = get_all_articles(); print(f'{len(arts)}건 수집')"
 ```
 
 ---
 
-## DB 확인
+## 데이터베이스 명세
 
-### Python으로 조회
-
-```python
-import sqlite3, json
-
-conn = sqlite3.connect("news.db")
-conn.row_factory = sqlite3.Row
-
-# 최근 10건 조회
-rows = conn.execute("""
-    SELECT id, source, title, major_category, sub_category, crawled_at
-    FROM articles
-    ORDER BY id DESC
-    LIMIT 10
-""").fetchall()
-
-for r in rows:
-    print(dict(r))
-
-conn.close()
-```
-
-### SQLite CLI
-
-```bash
-sqlite3 news.db
-```
-```sql
-.headers on
-.mode column
-
--- 전체 건수
-SELECT COUNT(*) FROM articles;
-
--- 언론사별 건수
-SELECT source, COUNT(*) FROM articles GROUP BY source;
-
--- 최근 기사 조회
-SELECT id, source, title, major_category FROM articles ORDER BY id DESC LIMIT 10;
-
--- 태그 포함 조회
-SELECT title, tags FROM articles WHERE major_category = 'IT' LIMIT 5;
-
-.quit
-```
-
-### GUI 툴
-
-- **DB Browser for SQLite**: https://sqlitebrowser.org (무료)
-- **VS Code 확장**: `SQLite Viewer` 설치 후 `news.db` 파일 직접 열기
+- `articles`: 수집 원문 보존
+- `article_translations`: 한국어 번역문 및 상태 (`pending`, `in_progress`, `completed`, `failed`)
+- `translation_chunks`: 긴 본문의 분할 조각 번역문 및 조각별 완료 상태
+- `translation_quota`: 일일 호출량 및 토큰 수 영속화
+- `crawl_locks`: 단일 프로세스 실행 락
+- `article_analysis`: 이전 분석 데이터 보존용
