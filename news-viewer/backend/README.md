@@ -18,7 +18,7 @@ backend/
 
 ```
 news-crawling-project/
-├── crawling-python/
+├── news-crawling/
 │   └── news.db       # 크롤러가 생성하는 SQLite DB
 └── news-viewer/
     └── backend/      # 이 폴더
@@ -72,6 +72,7 @@ uvicorn main:app --reload
 ### `GET /articles` — 기사 목록 조회
 
 뉴스 기사 목록을 페이지네이션, 카테고리, 출처, 검색어 필터와 함께 반환합니다.
+한국어 번역이 완료된 기사는 `translated_title`과 `translated_content`를 기본 `title`, `content`로 우선 반환합니다.
 
 **쿼리 파라미터**
 
@@ -81,7 +82,7 @@ uvicorn main:app --reload
 | `size` | int | 20 | 페이지당 기사 수 (1~100) |
 | `category` | string | - | 대분류 카테고리 필터 |
 | `source` | string | - | 출처(언론사) 필터 |
-| `q` | string | - | 제목 또는 요약 내 검색어 |
+| `q` | string | - | 원문/번역 제목, 원문/번역 본문 또는 요약 내 검색어 |
 
 **응답 예시**
 
@@ -93,12 +94,21 @@ uvicorn main:app --reload
   "articles": [
     {
       "id": 1,
-      "title": "기사 제목",
+      "url": "https://example.com/ai-release",
+      "source": "techcrunch",
+      "title": "OpenAI 새 모델 출시",
+      "content": "새 모델은 추론 능력에서 상당한 개선을 보여줍니다.",
+      "published_at": "2026-11-12T00:00:00Z",
+      "crawled_at": "2026-11-12T01:00:00",
       "summary": "기사 요약",
-      "source": "언론사명",
-      "major_category": "IT",
+      "major_category": "AI",
+      "sub_category": "LLM",
       "tags": ["AI", "기술"],
-      "crawled_at": "2026-05-14T10:00:00"
+      "original_title": "OpenAI Releases New Model",
+      "original_content": "The new model shows significant improvements in reasoning.",
+      "translated_title": "OpenAI 새 모델 출시",
+      "translated_content": "새 모델은 추론 능력에서 상당한 개선을 보여줍니다.",
+      "translation_status": "completed"
     }
   ]
 }
@@ -109,18 +119,66 @@ uvicorn main:app --reload
 ### `GET /articles/{article_id}` — 기사 단건 조회
 
 특정 ID의 기사를 반환합니다. 존재하지 않으면 `404`를 반환합니다.
+번역이 완료된 기사는 한국어 번역문을 기본 `title`, `content`로 반환하며, 미번역 또는 원문 변경 시 원문을 반환합니다.
 
 **응답 예시**
 
 ```json
 {
   "id": 1,
-  "title": "기사 제목",
+  "url": "https://example.com/ai-release",
+  "source": "techcrunch",
+  "title": "OpenAI 새 모델 출시",
+  "content": "새 모델은 추론 능력에서 상당한 개선을 보여줍니다.",
+  "published_at": "2026-11-12T00:00:00Z",
+  "crawled_at": "2026-11-12T01:00:00",
   "summary": "기사 요약",
-  "source": "언론사명",
-  "major_category": "IT",
+  "major_category": "AI",
+  "sub_category": "LLM",
   "tags": ["AI", "기술"],
-  "crawled_at": "2026-05-14T10:00:00"
+  "original_title": "OpenAI Releases New Model",
+  "original_content": "The new model shows significant improvements in reasoning.",
+  "translated_title": "OpenAI 새 모델 출시",
+  "translated_content": "새 모델은 추론 능력에서 상당한 개선을 보여줍니다.",
+  "translation_status": "completed"
+}
+```
+
+---
+
+### `GET /briefing` — 오늘의 AI 브리핑
+
+최근 24시간 동안 수집/발행된 AI 기사 중 주제 및 출처 다양성을 고려한 핵심 브리핑 목록을 최대 5개 반환합니다.
+한국어 번역이 완료된 기사는 `translated_title`과 `translated_content`를 기본 `title`, `content`로 우선 반환합니다.
+
+**응답 예시**
+
+```json
+{
+  "generated_at": "2026-11-12T03:00:00+00:00",
+  "window_start": "2026-11-11T03:00:00+00:00",
+  "window_end": "2026-11-12T03:00:00+00:00",
+  "selection_method": "주제·출처 다양성, 최신순을 반영한 규칙 기반 선정",
+  "articles": [
+    {
+      "id": 1,
+      "url": "https://example.com/ai-release",
+      "source": "techcrunch",
+      "title": "OpenAI 새 모델 출시",
+      "content": "새 모델은 추론 능력에서 상당한 개선을 보여줍니다.",
+      "published_at": "2026-11-12T00:00:00Z",
+      "crawled_at": "2026-11-12T01:00:00",
+      "summary": "기사 요약",
+      "major_category": "AI",
+      "sub_category": "LLM",
+      "tags": ["AI", "기술"],
+      "original_title": "OpenAI Releases New Model",
+      "original_content": "The new model shows significant improvements in reasoning.",
+      "translated_title": "OpenAI 새 모델 출시",
+      "translated_content": "새 모델은 추론 능력에서 상당한 개선을 보여줍니다.",
+      "translation_status": "completed"
+    }
+  ]
 }
 ```
 
@@ -163,8 +221,9 @@ DB에 존재하는 언론사와 각 기사 수를 반환합니다. 기사 수 �
 ```python
 @contextmanager
 def _connect():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(_get_active_db_path())
     conn.row_factory = sqlite3.Row
+    conn.create_function("compute_content_hash", 2, compute_content_hash)
     try:
         yield conn
     finally:
@@ -197,9 +256,33 @@ SQLite에는 배열 타입이 없기 때문에 태그는 JSON 문자열(`"[\"AI\
 ### 기사 목록 — `GET /articles`
 
 1. `page`와 `size`로 `OFFSET`, `LIMIT`을 계산합니다.
-2. `category`, `source`, `q` 파라미터가 있으면 `WHERE` 절 조건을 동적으로 조립합니다.
-3. 전체 건수(`COUNT(*)`)와 실제 데이터를 같은 DB 연결 안에서 조회해 반환합니다.
-4. 정렬 기준은 `crawled_at DESC` — 최신 기사가 먼저 표시됩니다.
+2. `article_translations` 테이블 존재 여부를 감지하여, 테이블이 없는 구버전 DB에서도 원문으로 정상 폴백합니다.
+3. 원문 해시(`compute_content_hash`)를 기준으로 현재 원문 버전과 일치하고 완료(`status = 'completed'`)된 번역이 있는 경우, 번역 제목/본문을 `title`, `content`로 우선 제공합니다.
+4. `category`, `source`, `q` 파라미터가 있으면 `WHERE` 절 조건을 동적으로 조립합니다.
+   - 검색(`q`): 원문 제목, 번역 제목, 원문 본문, 번역 본문, 요약 컬럼 모두를 대상으로 검색을 수행합니다.
+5. 전체 건수(`COUNT(*)`)와 실제 데이터를 같은 DB 연결 안에서 조회해 반환합니다.
+6. 정렬 기준은 `crawled_at DESC` — 최신 기사가 먼저 표시됩니다.
+
+---
+
+### 오늘의 AI 브리핑 — `GET /briefing`
+
+1. 최근 24시간(`window_start` ~ `window_end`, UTC 기준) 윈도우 내의 AI 대분류 기사를 후보군으로 조회합니다.
+2. 날짜는 발행일(`published_at`) 우선이며, 파싱 실패 또는 누락 시 수집일(`crawled_at`)을 사용합니다. 시간대 표기가 없는 날짜는 한국 표준시(KST, UTC+9)로 해석합니다.
+3. 후보군 중 다음 우선순위에 따라 최대 5개의 핵심 기사를 선정합니다:
+   - **주제 다양성**: 아직 선택되지 않은 소분류(`sub_category`) 기사를 우선 선택합니다.
+   - **출처 다양성**: 아직 선택되지 않은 출처(`source`) 기사를 우선 선택합니다.
+   - **최신순**: 유효한 발행일/수집일이 최신인 기사를 우선합니다.
+   - **ID 정렬**: 동일 조건일 경우 ID를 기준으로 정렬합니다.
+4. 번역 완료 기사는 한국어 번역문을 우선 반환하며, 미번역 기사는 원문으로 폴백합니다.
+
+---
+
+### 번역 우선 순위 및 해시 정합성 보장
+
+- **원문 해시 검증**: `sha256(strip(title) + '\n' + strip(content))` 해시를 통해 원문 변경 여부를 검증합니다.
+- **원문 변경 시 폴백**: 원문 본문이나 제목이 변경되어 해시가 불일치하면 이전 버전의 완료 번역을 노출하지 않고 최신 원문으로 즉시 폴백합니다.
+- **부분 번역 은닉**: 번역이 진행 중이거나 미완료인 경우 부분 청크를 노출하지 않고 원문을 유지하며, `translation_status`로 상태를 제공합니다.
 
 ---
 
@@ -219,8 +302,24 @@ app.add_middleware(
 
 ---
 
+## 테스트 및 검증
+
+독립적인 단위 테스트는 SQLite 임시 DB fixture를 활용하여 운영 DB 및 외부 API 호출 없이 실행됩니다.
+
+```bash
+# 백엔드 전체 단위 테스트 실행
+python -m unittest discover -p "test_*.py" -v
+
+# 개별 테스트 실행
+python -m unittest test_translated_articles.py -v
+python -m unittest test_search_and_filters.py -v
+python -m unittest test_briefing.py -v
+```
+
+---
+
 ## 개발 참고사항
 
-- DB 경로는 `main.py` 상단의 `DB_PATH` 변수로 관리됩니다.
+- DB 경로는 `main.py` 상단의 `DB_PATH` 변수 및 환경 변수 `DB_PATH`로 관리됩니다.
 - 프로덕션 배포 시 `allow_origins`를 실제 도메인으로 변경하세요.
 - `uvicorn main:app --reload` 의 `--reload` 옵션은 개발 전용입니다. 운영 환경에서는 제거하세요.
