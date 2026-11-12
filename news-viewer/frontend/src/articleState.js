@@ -13,7 +13,7 @@ export function articleReducer(state, action) {
       return {
         ...state,
         loading: true,
-        selected: null,
+        selected: action.view === "briefing" ? state.selected : null,
         error: "",
         requestId: action.requestId ?? state.requestId + 1,
       };
@@ -25,7 +25,9 @@ export function articleReducer(state, action) {
       }
       const articles = action.articles || [];
       let nextSelected = null;
-      if (articles.length > 0) {
+      if (action.view === "briefing") {
+        nextSelected = state.selected;
+      } else if (articles.length > 0) {
         if (state.selected && articles.some((a) => a.id === state.selected.id)) {
           nextSelected = state.selected;
         } else if (!action.isCompact) {
@@ -71,7 +73,7 @@ export function articleReducer(state, action) {
     }
 
     case "RESIZE_VIEWPORT": {
-      if (!action.isCompact) {
+      if (!action.isCompact && (!action.view || action.view === "articles")) {
         // Transitioned to desktop: if no article is selected and not loading, auto-select first article
         if (!state.loading && state.articles.length > 0 && !state.selected) {
           return {
