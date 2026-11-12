@@ -2,6 +2,7 @@ import argparse
 import logging
 import sys
 from datetime import datetime
+from typing import Optional
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +22,46 @@ def _safe_log_text(text: str) -> str:
 
 def _has_korean(text: str) -> bool:
     return any("\uac00" <= char <= "\ud7a3" for char in text)
+
+
+def crawl_and_save_articles(articles: Optional[list[dict]] = None) -> tuple[int, int, int, set[int]]:
+    """외부 소스로부터 기사를 수집하여 원문 그대로 articles 테이블에 우선 저장한다.
+    요약이나 분류 API는 일체 호출하지 않는다.
+    반환값: (신규 저장 건수, 기존 갱신 건수, 실패 건수, 신규 기사 ID 세트)"""
+    from db import get_article_id_by_url, is_duplicate, refresh_article_from_source, save_article
+
+    if articles is None:
+        from crawlers import get_all_articles
+        logger.info("뉴스 소스 수집 시작...")
+        articles = get_all_articles()
+        logger.info("총 %d건 수집 완료", len(articles))
+
+    saved = refreshed = failed = 0
+    new_ids: set[int] = set()
+
+    for article in articles:
+        url = article.get("url")
+        if not url:
+            failed += 1
+            continue
+
+        if is_duplicate(url):
+            if refresh_article_from_source(article):
+                refreshed += 1
+            else:
+                failed += 1
+        else:
+            if save_article(article):
+                saved += 1
+                aid = get_article_id_by_url(url)
+                if aid:
+                    new_ids.add(aid)
+            else:
+                failed += 1
+
+    logger.info("원문 수집 및 저장 완료 | 수집: %d | 신규: %d | 갱신: %d | 실패: %d",
+                len(articles), saved, refreshed, failed)
+    return saved, refreshed, failed, new_ids
 
 
 def run_pipeline() -> None:
