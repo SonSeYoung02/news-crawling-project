@@ -370,13 +370,27 @@ const s = {
 };
 
 export default function App() {
-  const [state, dispatch] = useReducer(articleReducer, initialArticleState);
   const [categories, setCategories] = useState([]);
   const [sources, setSources] = useState([]);
   const [totalAll, setTotalAll] = useState(0);
+  const [page, setPage] = useState(1);
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedSource, setSelectedSource] = useState("");
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
   const [metadataError, setMetadataError] = useState("");
   const [isCompact, setIsCompact] = useState(() => window.matchMedia(COMPACT_QUERY).matches);
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const [articleState, dispatch] = useReducer(articleReducer, initialArticleState);
+  const { articles, total, loading, error, selected } = articleState;
+
+  const setSelected = (articleOrUpdater) => {
+    dispatch({ type: "SELECT_ARTICLE", payload: articleOrUpdater });
+  };
+
+  const reqIdRef = useRef(0);
+  const activeReqRef = useRef(0);
 
   const isCompactRef = useRef(isCompact);
   useEffect(() => {
@@ -412,13 +426,24 @@ export default function App() {
     return () => controller.abort();
   }, []);
 
+  const startFetch = () => {
+    const nextReqId = ++reqIdRef.current;
+    dispatch({ type: "START_FETCH", requestId: nextReqId });
+    return nextReqId;
+  };
+
   useEffect(() => {
     const controller = new AbortController();
-    const currentReqId = state.requestId;
-    const params = new URLSearchParams({ page: state.page, size: SIZE });
-    if (state.selectedCategory) params.set("category", state.selectedCategory);
-    if (state.selectedSource) params.set("source", state.selectedSource);
-    if (state.search) params.set("q", state.search);
+    let currentReqId = reqIdRef.current;
+    if (activeReqRef.current === currentReqId) {
+      currentReqId = startFetch();
+    }
+    activeReqRef.current = currentReqId;
+
+    const params = new URLSearchParams({ page, size: SIZE });
+    if (selectedCategory) params.set("category", selectedCategory);
+    if (selectedSource) params.set("source", selectedSource);
+    if (search) params.set("q", search);
 
     fetchJSON(`/articles?${params}`, controller.signal)
       .then((data) => {
@@ -441,9 +466,9 @@ export default function App() {
       });
 
     return () => controller.abort();
-  }, [state.page, state.selectedCategory, state.selectedSource, state.search, state.requestId]);
+  }, [page, selectedCategory, selectedSource, search]);
 
-  const totalPages = Math.ceil(state.total / SIZE);
+  const totalPages = Math.ceil(total / SIZE);
   const categoryItems = [
     { major_category: "", count: totalAll },
     ...categories,
@@ -458,20 +483,37 @@ export default function App() {
 
   const handleCategoryClick = (cat) => {
     setFiltersOpen(false);
-    dispatch({ type: "SET_CATEGORY", category: cat });
+    startFetch();
+    setSelectedCategory(cat);
+    setSelectedSource("");
+    setPage(1);
   };
 
   const handleSourceClick = (src) => {
     setFiltersOpen(false);
-    dispatch({ type: "SET_SOURCE", source: src });
+    startFetch();
+    setSelectedSource(src);
+    setSelectedCategory("");
+    setPage(1);
   };
 
   const handleResetSearch = () => {
-    dispatch({ type: "RESET_SEARCH" });
+    startFetch();
+    setQuery("");
+    setSearch("");
+    setPage(1);
   };
 
-  const handleSearchSubmit = () => {
-    dispatch({ type: "SUBMIT_SEARCH" });
+  const handleSearchSubmit = (e) => {
+    e?.preventDefault();
+    startFetch();
+    setSearch(query);
+    setPage(1);
+  };
+
+  const handlePageChange = (newPage) => {
+    startFetch();
+    setPage(newPage);
   };
 
   return (
@@ -495,12 +537,12 @@ export default function App() {
             <button
               type="button"
               key={c.major_category}
-              aria-pressed={state.selectedCategory === c.major_category}
+              aria-pressed={selectedCategory === c.major_category}
               onClick={() => handleCategoryClick(c.major_category)}
-              style={{ ...s.filterItem(state.selectedCategory === c.major_category), ...s.filterControl }}
+              style={{ ...s.filterItem(selectedCategory === c.major_category), ...s.filterControl }}
             >
               <span>{c.major_category || "전체"}</span>
-              <span style={s.filterCount(state.selectedCategory === c.major_category)}>{c.count}</span>
+              <span style={s.filterCount(selectedCategory === c.major_category)}>{c.count}</span>
             </button>
           ))}
 
@@ -509,12 +551,12 @@ export default function App() {
             <button
               type="button"
               key={src.source}
-              aria-pressed={state.selectedSource === src.source}
+              aria-pressed={selectedSource === src.source}
               onClick={() => handleSourceClick(src.source)}
-              style={{ ...s.filterItem(state.selectedSource === src.source), ...s.filterControl }}
+              style={{ ...s.filterItem(selectedSource === src.source), ...s.filterControl }}
             >
               <span>{src.source || "전체"}</span>
-              <span style={s.filterCount(state.selectedSource === src.source)}>{src.count}</span>
+              <span style={s.filterCount(selectedSource === src.source)}>{src.count}</span>
             </button>
           ))}
         </div>
@@ -526,10 +568,10 @@ export default function App() {
         <div style={{ ...s.topbar, ...(isCompact ? s.compactTopbar : {}) }}>
           <input
             aria-label="기사 검색"
-            value={state.query}
-            onChange={(e) => dispatch({ type: "SET_QUERY", query: e.target.value })}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") handleSearchSubmit();
+              if (e.key === "Enter") handleSearchSubmit(e);
             }}
             placeholder="기사 제목, 요약으로 검색..."
             style={s.searchInput}
@@ -542,18 +584,18 @@ export default function App() {
           </button>
         </div>
 
-        {(state.error || metadataError) && <div role="alert" style={s.error}>{state.error || metadataError}</div>}
+        {(error || metadataError) && <div role="alert" style={s.error}>{error || metadataError}</div>}
 
         <div style={s.content}>
           {/* Article List */}
-          <div aria-label="기사 목록" style={{ ...s.listPanel, ...(isCompact ? s.compactList : {}), ...(isCompact && state.selected ? { display: "none" } : {}) }}>
-            {state.loading && <div style={s.statusText}>불러오는 중...</div>}
-            {!state.loading && !state.error && state.articles.length === 0 && (
-              state.search ? (
+          <div aria-label="기사 목록" style={{ ...s.listPanel, ...(isCompact ? s.compactList : {}), ...(isCompact && selected ? { display: "none" } : {}) }}>
+            {loading && <div style={s.statusText}>불러오는 중...</div>}
+            {!loading && !error && articles.length === 0 && (
+              search ? (
                 <div style={s.emptyState}>
                   <div style={s.emptyIcon} aria-hidden="true">🔍</div>
                   <div style={s.emptyTitle}>
-                    &lsquo;{state.search}&rsquo;에 대한 검색 결과가 없습니다
+                    &lsquo;{search}&rsquo;에 대한 검색 결과가 없습니다
                   </div>
                   <div style={s.emptyDesc}>
                     단어의 철자가 정확한지 확인하거나 다른 검색어로 검색해 보세요.
@@ -570,13 +612,13 @@ export default function App() {
                 <div style={s.statusText}>기사가 없습니다</div>
               )
             )}
-            {!state.loading && state.articles.map((a) => (
+            {!loading && articles.map((a) => (
               <button
                 type="button"
                 key={a.id}
-                aria-pressed={state.selected?.id === a.id}
-                onClick={() => dispatch({ type: "SELECT_ARTICLE", article: a })}
-                style={s.card(state.selected?.id === a.id)}
+                aria-pressed={selected?.id === a.id}
+                onClick={() => setSelected(a)}
+                style={s.card(selected?.id === a.id)}
               >
                 <div style={s.cardMeta}>
                   <span>{a.source}</span>
@@ -602,17 +644,17 @@ export default function App() {
             {totalPages > 1 && (
               <div style={s.pagination}>
                 <button
-                  onClick={() => dispatch({ type: "SET_PAGE", page: Math.max(1, state.page - 1) })}
-                  disabled={state.page === 1}
-                  style={{ ...s.pageBtn(state.page === 1), ...s.touchButton }}
+                  onClick={() => handlePageChange(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                  style={{ ...s.pageBtn(page === 1), ...s.touchButton }}
                 >
                   이전
                 </button>
-                <span style={s.pageInfo}>{state.page} / {totalPages}</span>
+                <span style={s.pageInfo}>{page} / {totalPages}</span>
                 <button
-                  onClick={() => dispatch({ type: "SET_PAGE", page: Math.min(totalPages, state.page + 1) })}
-                  disabled={state.page === totalPages}
-                  style={{ ...s.pageBtn(state.page === totalPages), ...s.touchButton }}
+                  onClick={() => handlePageChange(Math.min(totalPages, page + 1))}
+                  disabled={page === totalPages}
+                  style={{ ...s.pageBtn(page === totalPages), ...s.touchButton }}
                 >
                   다음
                 </button>
@@ -621,57 +663,57 @@ export default function App() {
           </div>
 
           {/* Article Detail */}
-          <div aria-label="기사 상세" style={{ ...s.detailPanel, ...(isCompact ? s.compactDetail : {}), ...(isCompact && !state.selected ? { display: "none" } : {}) }}>
-            {!state.selected ? (
+          <div aria-label="기사 상세" style={{ ...s.detailPanel, ...(isCompact ? s.compactDetail : {}), ...(isCompact && !selected ? { display: "none" } : {}) }}>
+            {!selected ? (
               <div style={s.detailEmpty}>
                 <span style={{ fontSize: 14, color: TEXT_SECONDARY }}>
-                  {state.loading
+                  {loading
                     ? "기사를 불러오는 중..."
-                    : state.error
+                    : error
                     ? "기사를 불러오지 못했습니다"
-                    : state.articles.length === 0
-                    ? (state.search ? "검색 결과가 없습니다" : "표시할 기사가 없습니다")
+                    : articles.length === 0
+                    ? (search ? "검색 결과가 없습니다" : "표시할 기사가 없습니다")
                     : "기사를 선택하세요"}
                 </span>
               </div>
             ) : (
               <>
-                {isCompact && <button type="button" style={s.backButton} onClick={() => dispatch({ type: "CLEAR_SELECTION" })}>← 목록으로</button>}
+                {isCompact && <button type="button" style={s.backButton} onClick={() => setSelected(null)}>← 목록으로</button>}
                 <div style={s.detailMeta}>
-                  <span>{state.selected.source}</span>
+                  <span>{selected.source}</span>
                   <span>·</span>
-                  <span>{state.selected.major_category}</span>
-                  {state.selected.sub_category && (
+                  <span>{selected.major_category}</span>
+                  {selected.sub_category && (
                     <>
                       <span>·</span>
-                      <span style={{ color: TEXT_SECONDARY }}>{state.selected.sub_category}</span>
+                      <span style={{ color: TEXT_SECONDARY }}>{selected.sub_category}</span>
                     </>
                   )}
                 </div>
-                <h1 style={s.detailTitle}>{state.selected.title}</h1>
+                <h1 style={s.detailTitle}>{selected.title}</h1>
                 <div style={s.detailDate}>
-                  <span>{state.selected.published_at?.slice(0, 10)}</span>
-                  {state.selected.url && (
+                  <span>{selected.published_at?.slice(0, 10)}</span>
+                  {selected.url && (
                     <>
                       <span>·</span>
-                      <a href={state.selected.url} target="_blank" rel="noreferrer" style={s.detailLink}>
+                      <a href={selected.url} target="_blank" rel="noreferrer" style={s.detailLink}>
                         원문 보기 ↗
                       </a>
                     </>
                   )}
                 </div>
-                {state.selected.summary && (
+                {selected.summary && (
                   <div style={s.summaryBox}>
                     <div style={s.summaryLabel}>LLM 분석</div>
-                    <div style={s.summaryText}>{state.selected.summary}</div>
+                    <div style={s.summaryText}>{selected.summary}</div>
                   </div>
                 )}
                 <div style={s.detailContent}>
-                  {cleanArticleText(state.selected.content) || "이 기사는 원문 본문을 가져오지 못했습니다."}
+                  {cleanArticleText(selected.content) || "이 기사는 원문 본문을 가져오지 못했습니다."}
                 </div>
-                {(state.selected.tags || []).length > 0 && (
+                {(selected.tags || []).length > 0 && (
                   <div style={s.tagRow}>
-                    {(state.selected.tags || []).map((t) => (
+                    {(selected.tags || []).map((t) => (
                       <span key={t} style={{ ...s.tag, fontSize: 12, padding: "4px 12px" }}>{t}</span>
                     ))}
                   </div>

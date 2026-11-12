@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { articleReducer, initialArticleState } from "./articleState.js";
 
-test("Issue #34 Regression: SUBMIT_SEARCH immediately sets loading=true and selected=null (prevents stale article in loading transition)", () => {
+test("Issue #34 Regression: START_FETCH synchronously sets loading=true and selected=null (prevents stale article in loading transition)", () => {
   // Simulate active desktop state with an article open
   const previousState = {
     ...initialArticleState,
@@ -12,18 +12,16 @@ test("Issue #34 Regression: SUBMIT_SEARCH immediately sets loading=true and sele
       { id: 2, title: "기사 2" },
     ],
     selected: { id: 1, title: "기사 1 (Plan Stamping)" },
-    query: "없는검색어12345",
-    search: "",
+    error: "이전 에러",
     requestId: 1,
   };
 
-  const nextState = articleReducer(previousState, { type: "SUBMIT_SEARCH" });
+  const nextState = articleReducer(previousState, { type: "START_FETCH", requestId: 2 });
 
-  assert.equal(nextState.loading, true, "Loading must be immediately true during search submission");
+  assert.equal(nextState.loading, true, "Loading must be immediately true during request start");
   assert.equal(nextState.selected, null, "Selected article must be immediately null to avoid stale detail flash");
-  assert.equal(nextState.search, "없는검색어12345");
-  assert.equal(nextState.page, 1);
-  assert.equal(nextState.requestId, 2, "RequestId must increment to invalidate pending responses");
+  assert.equal(nextState.error, "", "Error must be cleared on start");
+  assert.equal(nextState.requestId, 2, "RequestId must update to new request sequence");
 });
 
 test("Issue #34 Regression: FETCH_SUCCESS with 0 results strictly enforces selected=null", () => {
@@ -32,7 +30,6 @@ test("Issue #34 Regression: FETCH_SUCCESS with 0 results strictly enforces selec
     loading: true,
     articles: [{ id: 1, title: "이전 기사" }],
     selected: null,
-    search: "없는검색어12345",
     requestId: 3,
   };
 
@@ -51,29 +48,28 @@ test("Issue #34 Regression: FETCH_SUCCESS with 0 results strictly enforces selec
 });
 
 test("Issue #34 Regression: Fast request switching rejects late stale responses", () => {
-  // Initial state where request 5 is current (e.g. search for "없는검색어")
+  // Current state waiting for Request 5
   const currentState = {
     ...initialArticleState,
     loading: true,
     articles: [],
     total: 0,
     selected: null,
-    search: "없는검색어",
     requestId: 5,
   };
 
-  // Stale Request 4 (e.g. earlier search for "AI") finishes late with 20 articles
+  // Stale Request 4 finishes late with 20 articles
   const staleResponse = {
     type: "FETCH_SUCCESS",
-    requestId: 4, // Older requestId!
-    articles: [{ id: 99, title: "구 요청 기사 (AI)" }],
+    requestId: 4, // Older requestId
+    articles: [{ id: 99, title: "구 요청 기사" }],
     total: 100,
     isCompact: false,
   };
 
   const afterStaleResponse = articleReducer(currentState, staleResponse);
 
-  // Must not accept stale response!
+  // Must not accept stale response
   assert.equal(afterStaleResponse.articles.length, 0, "Stale articles must be discarded");
   assert.equal(afterStaleResponse.selected, null, "Stale article must not be selected");
   assert.equal(afterStaleResponse.loading, true, "Loading state for current request must remain true");
@@ -94,27 +90,59 @@ test("Issue #34 Regression: Fast request switching rejects late stale responses"
   assert.equal(finalState.selected, null);
 });
 
-test("Issue #34 Regression: RESET_SEARCH preserves selectedCategory and selectedSource", () => {
-  const filteredState = {
+test("Issue #34 Regression: FETCH_ERROR cleans state and rejects stale error", () => {
+  const loadingState = {
     ...initialArticleState,
-    selectedCategory: "AI",
-    selectedSource: "GeekNews",
-    query: "없는검색어",
-    search: "없는검색어",
-    page: 2,
+    loading: true,
+    articles: [{ id: 1, title: "이전 기사" }],
     selected: null,
     requestId: 7,
   };
 
-  const resetState = articleReducer(filteredState, { type: "RESET_SEARCH" });
+  // Stale error for Request 6
+  const staleError = articleReducer(loadingState, {
+    type: "FETCH_ERROR",
+    requestId: 6,
+    error: "오래된 에러",
+  });
+  assert.equal(staleError.error, "");
+  assert.equal(staleError.loading, true);
 
-  assert.equal(resetState.query, "", "Query must be cleared");
-  assert.equal(resetState.search, "", "Search must be cleared");
-  assert.equal(resetState.page, 1, "Page must be reset to 1");
-  assert.equal(resetState.selected, null);
-  assert.equal(resetState.selectedCategory, "AI", "selectedCategory must be preserved");
-  assert.equal(resetState.selectedSource, "GeekNews", "selectedSource must be preserved");
-  assert.equal(resetState.requestId, 8, "RequestId must increment for refetch");
+  // Current error for Request 7
+  const currentError = articleReducer(loadingState, {
+    type: "FETCH_ERROR",
+    requestId: 7,
+    error: "서버 에러",
+  });
+  assert.equal(currentError.loading, false);
+  assert.equal(currentError.articles.length, 0);
+  assert.equal(currentError.selected, null);
+  assert.equal(currentError.error, "서버 에러");
+});
+
+test("Issue #34 Regression: SELECT_ARTICLE supports both object and functional updater (setSelected contract)", () => {
+  const articleA = { id: 10, title: "기사 A" };
+  const articleB = { id: 20, title: "기사 B" };
+
+  const state1 = articleReducer(initialArticleState, {
+    type: "SELECT_ARTICLE",
+    payload: articleA,
+  });
+  assert.equal(state1.selected?.id, 10);
+
+  // Functional updater
+  const state2 = articleReducer(state1, {
+    type: "SELECT_ARTICLE",
+    payload: (prev) => (prev?.id === 10 ? articleB : null),
+  });
+  assert.equal(state2.selected?.id, 20);
+
+  // Null selection (e.g. mobile back button)
+  const state3 = articleReducer(state2, {
+    type: "SELECT_ARTICLE",
+    payload: null,
+  });
+  assert.equal(state3.selected, null);
 });
 
 test("Issue #34 Regression: RESIZE_VIEWPORT bidirectional preservation and loading guard", () => {

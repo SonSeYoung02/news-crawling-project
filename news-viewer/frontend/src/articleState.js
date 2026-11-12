@@ -4,83 +4,23 @@ export const initialArticleState = {
   loading: true,
   error: "",
   selected: null,
-  page: 1,
-  query: "",
-  search: "",
-  selectedCategory: "",
-  selectedSource: "",
   requestId: 0,
 };
 
 export function articleReducer(state, action) {
   switch (action.type) {
-    case "SET_QUERY":
+    case "START_FETCH":
       return {
         ...state,
-        query: action.query,
-      };
-
-    case "SUBMIT_SEARCH":
-      return {
-        ...state,
-        search: state.query,
-        page: 1,
-        selected: null,
         loading: true,
-        error: "",
-        requestId: state.requestId + 1,
-      };
-
-    case "RESET_SEARCH":
-      return {
-        ...state,
-        query: "",
-        search: "",
-        page: 1,
         selected: null,
-        loading: true,
         error: "",
-        requestId: state.requestId + 1,
-        // selectedCategory and selectedSource are preserved
-      };
-
-    case "SET_CATEGORY":
-      return {
-        ...state,
-        selectedCategory: action.category,
-        selectedSource: "",
-        page: 1,
-        selected: null,
-        loading: true,
-        error: "",
-        requestId: state.requestId + 1,
-      };
-
-    case "SET_SOURCE":
-      return {
-        ...state,
-        selectedSource: action.source,
-        selectedCategory: "",
-        page: 1,
-        selected: null,
-        loading: true,
-        error: "",
-        requestId: state.requestId + 1,
-      };
-
-    case "SET_PAGE":
-      return {
-        ...state,
-        page: action.page,
-        selected: null,
-        loading: true,
-        error: "",
-        requestId: state.requestId + 1,
+        requestId: action.requestId ?? state.requestId + 1,
       };
 
     case "FETCH_SUCCESS": {
       // Discard stale responses from superseded requests
-      if (action.requestId !== state.requestId) {
+      if (action.requestId !== undefined && action.requestId !== state.requestId) {
         return state;
       }
       const articles = action.articles || [];
@@ -104,7 +44,7 @@ export function articleReducer(state, action) {
 
     case "FETCH_ERROR": {
       // Discard stale error responses
-      if (action.requestId !== state.requestId) {
+      if (action.requestId !== undefined && action.requestId !== state.requestId) {
         return state;
       }
       return {
@@ -117,20 +57,20 @@ export function articleReducer(state, action) {
       };
     }
 
-    case "SELECT_ARTICLE":
+    case "SELECT_ARTICLE": {
+      const nextSelected =
+        typeof action.payload === "function"
+          ? action.payload(state.selected)
+          : action.payload !== undefined
+          ? action.payload
+          : action.article;
       return {
         ...state,
-        selected: action.article,
+        selected: nextSelected,
       };
-
-    case "CLEAR_SELECTION":
-      return {
-        ...state,
-        selected: null,
-      };
+    }
 
     case "RESIZE_VIEWPORT": {
-      // action.isCompact is the new viewport mode
       if (!action.isCompact) {
         // Transitioned to desktop: if no article is selected and not loading, auto-select first article
         if (!state.loading && state.articles.length > 0 && !state.selected) {
