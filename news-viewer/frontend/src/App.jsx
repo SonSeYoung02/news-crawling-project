@@ -328,6 +328,56 @@ const s = {
   touchButton: { minHeight: 44 },
   backButton: { minHeight: 44, marginBottom: 16, padding: "8px 12px", border: `1px solid ${BORDER}`, borderRadius: 8, background: "#fff", color: ACCENT, font: "inherit", cursor: "pointer" },
   error: { padding: "12px 16px", color: "#991b1b", background: "#fef2f2", fontSize: 14, flexShrink: 0 },
+  activeFilterBar: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+    padding: "8px 12px",
+    marginBottom: 10,
+    background: "#ffffff",
+    borderRadius: 10,
+    border: `1px solid ${BORDER}`,
+  },
+  activeFilterLabel: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#374151",
+    marginRight: 2,
+  },
+  activeFilterChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "4px 10px",
+    borderRadius: 16,
+    background: ACCENT_LIGHT,
+    color: ACCENT,
+    border: "none",
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  activeFilterRemove: {
+    fontSize: 11,
+    fontWeight: 700,
+    lineHeight: 1,
+    color: ACCENT_MID,
+  },
+  filterResetBtn: {
+    padding: "4px 8px",
+    borderRadius: 6,
+    background: "transparent",
+    color: TEXT_SECONDARY,
+    border: "none",
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: "pointer",
+    marginLeft: "auto",
+    fontFamily: "inherit",
+    textDecoration: "underline",
+  },
 };
 
 export default function App() {
@@ -423,7 +473,6 @@ export default function App() {
   const handleCategoryClick = (cat) => {
     setFiltersOpen(false);
     setSelectedCategory(cat);
-    setSelectedSource("");
     setPage(1);
     setSelected(null);
   };
@@ -431,7 +480,13 @@ export default function App() {
   const handleSourceClick = (src) => {
     setFiltersOpen(false);
     setSelectedSource(src);
+    setPage(1);
+    setSelected(null);
+  };
+
+  const handleResetFilters = () => {
     setSelectedCategory("");
+    setSelectedSource("");
     setPage(1);
     setSelected(null);
   };
@@ -509,6 +564,40 @@ export default function App() {
         <div style={s.content}>
           {/* Article List */}
           <div aria-label="기사 목록" style={{ ...s.listPanel, ...(isCompact ? s.compactList : {}), ...(isCompact && selected ? { display: "none" } : {}) }}>
+            {(selectedCategory || selectedSource) && (
+              <div style={s.activeFilterBar} aria-label="활성 필터">
+                <span style={s.activeFilterLabel}>적용된 필터:</span>
+                {selectedCategory && (
+                  <button
+                    type="button"
+                    style={s.activeFilterChip}
+                    onClick={() => handleCategoryClick("")}
+                    aria-label={`카테고리 ${selectedCategory} 필터 해제`}
+                  >
+                    <span>카테고리: {selectedCategory}</span>
+                    <span style={s.activeFilterRemove} aria-hidden="true">✕</span>
+                  </button>
+                )}
+                {selectedSource && (
+                  <button
+                    type="button"
+                    style={s.activeFilterChip}
+                    onClick={() => handleSourceClick("")}
+                    aria-label={`출처 ${selectedSource} 필터 해제`}
+                  >
+                    <span>출처: {selectedSource}</span>
+                    <span style={s.activeFilterRemove} aria-hidden="true">✕</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  style={s.filterResetBtn}
+                  onClick={handleResetFilters}
+                >
+                  초기화
+                </button>
+              </div>
+            )}
             {loading && <div style={s.statusText}>불러오는 중...</div>}
             {!loading && !error && articles.length === 0 && (
               <div style={s.statusText}>기사가 없습니다</div>
