@@ -3,6 +3,8 @@ import json
 import os
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Optional
 
@@ -16,7 +18,7 @@ DB_PATH = Path(os.environ.get("DB_PATH", str(DEFAULT_DB_PATH)))
 
 app = FastAPI(
     title="News Viewer API",
-    description="뉴스 크롤링 데이터를 조회하는 REST API. 기사 목록·상세·카테고리·출처 엔드포인트를 제공합니다.",
+    description="뉴스 크롤링 데이터를 조회하는 REST API. 기사 목록·상세·카테고리·출처·오늘의 AI 브리핑 엔드포인트를 제공합니다.",
     version="1.0.0",
 )
 
@@ -50,6 +52,14 @@ class ArticleListResponse(BaseModel):
     total: int
     page: int
     size: int
+    articles: list[Article]
+
+
+class BriefingResponse(BaseModel):
+    generated_at: str
+    window_start: str
+    window_end: str
+    selection_method: str
     articles: list[Article]
 
 
@@ -391,10 +401,10 @@ def get_article(article_id: int):
                         ELSE NULL
                     END AS translated_content,
                     CASE
-                    WHEN at.status IS NOT NULL THEN at.status
-                    WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
-                    ELSE 'pending'
-                END AS translation_status,
+                        WHEN at.status IS NOT NULL THEN at.status
+                        WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                        ELSE 'pending'
+                    END AS translation_status,
                     COALESCE(aa.summary, a.summary) AS summary,
                     COALESCE(aa.major_category, a.major_category) AS major_category,
                     COALESCE(aa.sub_category, a.sub_category) AS sub_category,
@@ -421,9 +431,9 @@ def get_article(article_id: int):
                     NULL AS translated_title,
                     NULL AS translated_content,
                     CASE
-                    WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
-                    ELSE 'pending'
-                END AS translation_status,
+                        WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                        ELSE 'pending'
+                    END AS translation_status,
                     COALESCE(aa.summary, a.summary) AS summary,
                     COALESCE(aa.major_category, a.major_category) AS major_category,
                     COALESCE(aa.sub_category, a.sub_category) AS sub_category,
@@ -476,3 +486,143 @@ def get_sources():
             "SELECT source, COUNT(*) as count FROM articles GROUP BY source ORDER BY count DESC"
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _article_time(value: Optional[str]) -> Optional[datetime]:
+    if not value or not value.strip():
+        return None
+    try:
+        result = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            result = parsedate_to_datetime(value)
+        except (ValueError, TypeError, OverflowError):
+            return None
+    if result.tzinfo is None:
+        # 크롤러의 datetime.now()로 저장된 시각은 한국 로컬 시각이다.
+        result = result.replace(tzinfo=timezone(timedelta(hours=9)))
+    try:
+        return result.astimezone(timezone.utc)
+    except (ValueError, OverflowError):
+        return None
+
+
+@app.get(
+    "/briefing",
+    response_model=BriefingResponse,
+    summary="오늘의 AI 브리핑",
+    description="최근 24시간 동안 수집/발행된 AI 기사 중 주제 및 출처 다양성을 고려한 핵심 브리핑 목록을 반환합니다. 번역 완료 기사는 한국어 번역문을 우선 제공합니다.",
+    tags=["articles"],
+)
+def get_briefing():
+    now = _utc_now()
+    start = now - timedelta(hours=24)
+    with _connect() as conn:
+        has_trans = _has_translations_table(conn)
+        if has_trans:
+            rows = conn.execute(
+                """
+                SELECT
+                    a.id, a.url, a.source,
+                    a.published_at, a.crawled_at,
+                    a.title AS original_title,
+                    a.content AS original_content,
+                    CASE
+                        WHEN at.status = 'completed' AND at.translated_title IS NOT NULL AND at.translated_title != ''
+                        THEN at.translated_title
+                        ELSE a.title
+                    END AS title,
+                    CASE
+                        WHEN at.status = 'completed' AND at.translated_content IS NOT NULL AND at.translated_content != ''
+                        THEN at.translated_content
+                        ELSE a.content
+                    END AS content,
+                    CASE
+                        WHEN at.status = 'completed' THEN at.translated_title
+                        ELSE NULL
+                    END AS translated_title,
+                    CASE
+                        WHEN at.status = 'completed' THEN at.translated_content
+                        ELSE NULL
+                    END AS translated_content,
+                    CASE
+                        WHEN at.status IS NOT NULL THEN at.status
+                        WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                        ELSE 'pending'
+                    END AS translation_status,
+                    a.summary AS summary,
+                    a.major_category AS major_category,
+                    a.sub_category AS sub_category,
+                    a.tags AS tags
+                FROM articles a
+                LEFT JOIN article_translations at
+                    ON at.article_id = a.id
+                    AND at.content_hash = compute_content_hash(a.title, a.content)
+                WHERE a.major_category = ?
+                """,
+                ("AI",),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT
+                    a.id, a.url, a.source,
+                    a.published_at, a.crawled_at,
+                    a.title AS original_title,
+                    a.content AS original_content,
+                    a.title AS title,
+                    a.content AS content,
+                    NULL AS translated_title,
+                    NULL AS translated_content,
+                    CASE
+                        WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                        ELSE 'pending'
+                    END AS translation_status,
+                    a.summary AS summary,
+                    a.major_category AS major_category,
+                    a.sub_category AS sub_category,
+                    a.tags AS tags
+                FROM articles a
+                WHERE a.major_category = ?
+                """,
+                ("AI",),
+            ).fetchall()
+
+    candidates = []
+    for row in rows:
+        article = _row_to_dict(row)
+        published = _article_time(article["published_at"]) or _article_time(article["crawled_at"])
+        if published is not None and start <= published <= now:
+            candidates.append((article, published))
+
+    selected = []
+    sources, topics = set(), set()
+    while candidates and len(selected) < 5:
+        def priority(candidate):
+            article, published = candidate
+            topic = (article.get("sub_category") or "").strip()
+            return (
+                bool(topic) and topic not in topics,
+                article["source"] not in sources,
+                published,
+                article["id"],
+            )
+
+        chosen = max(candidates, key=priority)
+        candidates.remove(chosen)
+        article = chosen[0]
+        selected.append(article)
+        sources.add(article["source"])
+        topics.add((article.get("sub_category") or "").strip())
+
+    return {
+        "generated_at": now.isoformat(),
+        "window_start": start.isoformat(),
+        "window_end": now.isoformat(),
+        "selection_method": "주제·출처 다양성, 최신순을 반영한 규칙 기반 선정",
+        "articles": selected,
+    }
