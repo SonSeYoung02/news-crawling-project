@@ -72,6 +72,7 @@ uvicorn main:app --reload
 ### `GET /articles` — 기사 목록 조회
 
 뉴스 기사 목록을 페이지네이션, 카테고리, 출처, 검색어 필터와 함께 반환합니다.
+한국어 번역이 완료된 기사는 `translated_title`과 `translated_content`를 기본 `title`, `content`로 우선 반환합니다.
 
 **쿼리 파라미터**
 
@@ -81,7 +82,7 @@ uvicorn main:app --reload
 | `size` | int | 20 | 페이지당 기사 수 (1~100) |
 | `category` | string | - | 대분류 카테고리 필터 |
 | `source` | string | - | 출처(언론사) 필터 |
-| `q` | string | - | 제목 또는 요약 내 검색어 |
+| `q` | string | - | 원문/번역 제목, 원문/번역 본문 또는 요약 내 검색어 |
 
 **응답 예시**
 
@@ -93,12 +94,21 @@ uvicorn main:app --reload
   "articles": [
     {
       "id": 1,
-      "title": "기사 제목",
+      "url": "https://example.com/ai-release",
+      "source": "techcrunch",
+      "title": "OpenAI 새 모델 출시",
+      "content": "새 모델은 추론 능력에서 상당한 개선을 보여줍니다.",
+      "published_at": "2026-11-12T00:00:00Z",
+      "crawled_at": "2026-11-12T01:00:00",
       "summary": "기사 요약",
-      "source": "언론사명",
-      "major_category": "IT",
+      "major_category": "AI",
+      "sub_category": "LLM",
       "tags": ["AI", "기술"],
-      "crawled_at": "2026-05-14T10:00:00"
+      "original_title": "OpenAI Releases New Model",
+      "original_content": "The new model shows significant improvements in reasoning.",
+      "translated_title": "OpenAI 새 모델 출시",
+      "translated_content": "새 모델은 추론 능력에서 상당한 개선을 보여줍니다.",
+      "translation_status": "completed"
     }
   ]
 }
@@ -109,18 +119,28 @@ uvicorn main:app --reload
 ### `GET /articles/{article_id}` — 기사 단건 조회
 
 특정 ID의 기사를 반환합니다. 존재하지 않으면 `404`를 반환합니다.
+번역이 완료된 기사는 한국어 번역문을 기본 `title`, `content`로 반환하며, 미번역 또는 원문 변경 시 원문을 반환합니다.
 
 **응답 예시**
 
 ```json
 {
   "id": 1,
-  "title": "기사 제목",
+  "url": "https://example.com/ai-release",
+  "source": "techcrunch",
+  "title": "OpenAI 새 모델 출시",
+  "content": "새 모델은 추론 능력에서 상당한 개선을 보여줍니다.",
+  "published_at": "2026-11-12T00:00:00Z",
+  "crawled_at": "2026-11-12T01:00:00",
   "summary": "기사 요약",
-  "source": "언론사명",
-  "major_category": "IT",
+  "major_category": "AI",
+  "sub_category": "LLM",
   "tags": ["AI", "기술"],
-  "crawled_at": "2026-05-14T10:00:00"
+  "original_title": "OpenAI Releases New Model",
+  "original_content": "The new model shows significant improvements in reasoning.",
+  "translated_title": "OpenAI 새 모델 출시",
+  "translated_content": "새 모델은 추론 능력에서 상당한 개선을 보여줍니다.",
+  "translation_status": "completed"
 }
 ```
 
@@ -197,9 +217,20 @@ SQLite에는 배열 타입이 없기 때문에 태그는 JSON 문자열(`"[\"AI\
 ### 기사 목록 — `GET /articles`
 
 1. `page`와 `size`로 `OFFSET`, `LIMIT`을 계산합니다.
-2. `category`, `source`, `q` 파라미터가 있으면 `WHERE` 절 조건을 동적으로 조립합니다.
-3. 전체 건수(`COUNT(*)`)와 실제 데이터를 같은 DB 연결 안에서 조회해 반환합니다.
-4. 정렬 기준은 `crawled_at DESC` — 최신 기사가 먼저 표시됩니다.
+2. `article_translations` 테이블 존재 여부를 감지하여, 테이블이 없는 구버전 DB에서도 원문으로 정상 폴백합니다.
+3. 원문 해시(`compute_content_hash`)를 기준으로 현재 원문 버전과 일치하고 완료(`status = 'completed'`)된 번역이 있는 경우, 번역 제목/본문을 `title`, `content`로 우선 제공합니다.
+4. `category`, `source`, `q` 파라미터가 있으면 `WHERE` 절 조건을 동적으로 조립합니다.
+   - 검색(`q`): 원문 제목, 번역 제목, 원문 본문, 번역 본문, 요약 컬럼 모두를 대상으로 검색을 수행합니다.
+5. 전체 건수(`COUNT(*)`)와 실제 데이터를 같은 DB 연결 안에서 조회해 반환합니다.
+6. 정렬 기준은 `crawled_at DESC` — 최신 기사가 먼저 표시됩니다.
+
+---
+
+### 번역 우선 순위 및 해시 정합성 보장
+
+- **원문 해시 검증**: `sha256(strip(title) + '\n' + strip(content))` 해시를 통해 원문 변경 여부를 검증합니다.
+- **원문 변경 시 폴백**: 원문 본문이나 제목이 변경되어 해시가 불일치하면 이전 버전의 완료 번역을 노출하지 않고 최신 원문으로 즉시 폴백합니다.
+- **부분 번역 은닉**: 번역이 진행 중이거나 미완료인 경우 부분 청크를 노출하지 않고 원문을 유지하며, `translation_status`로 상태를 제공합니다.
 
 ---
 
@@ -219,8 +250,18 @@ app.add_middleware(
 
 ---
 
+## 테스트 및 검증
+
+독립적인 단위 테스트는 SQLite 임시 DB fixture를 활용하여 운영 DB 및 외부 API 호출 없이 실행됩니다.
+
+```bash
+python -m unittest test_translated_articles.py -v
+```
+
+---
+
 ## 개발 참고사항
 
-- DB 경로는 `main.py` 상단의 `DB_PATH` 변수로 관리됩니다.
+- DB 경로는 `main.py` 상단의 `DB_PATH` 변수 및 환경 변수 `DB_PATH`로 관리됩니다.
 - 프로덕션 배포 시 `allow_origins`를 실제 도메인으로 변경하세요.
 - `uvicorn main:app --reload` 의 `--reload` 옵션은 개발 전용입니다. 운영 환경에서는 제거하세요.
