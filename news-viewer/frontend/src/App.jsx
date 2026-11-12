@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useReducer } from "react";
+import ArticleBody from "./ArticleBody";
 import { articleReducer, initialArticleState } from "./articleState.js";
 
 const API = "/api";
@@ -27,13 +28,6 @@ async function fetchJSON(path, signal) {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
 }
-const cleanArticleText = (text = "") =>
-  text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.includes("\uad11\uace0"))
-    .join("\n");
-
 
 const s = {
   layout: {
@@ -914,9 +908,7 @@ export default function App() {
                     <div style={s.summaryText}>{selected.summary}</div>
                   </div>
                 )}
-                <div style={s.detailContent}>
-                  {cleanArticleText(selected.content) || "이 기사는 원문 본문을 가져오지 못했습니다."}
-                </div>
+                <ArticleBody content={selected.content} style={s.detailContent} />
                 {(selected.tags || []).length > 0 && (
                   <div style={s.tagRow}>
                     {(selected.tags || []).map((t) => (
