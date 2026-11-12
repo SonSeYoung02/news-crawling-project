@@ -3,12 +3,6 @@ import sqlite3
 import tempfile
 import unittest
 
-temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-temp_db_path = temp_db.name
-temp_db.close()
-
-os.environ["DB_PATH"] = temp_db_path
-
 from fastapi.testclient import TestClient
 import main
 
@@ -63,51 +57,50 @@ def init_test_db(db_path: str):
                 UNIQUE(article_id, content_hash)
             )
         """)
+
+        # 1. 번역 완료된 영문 기사 (devto)
+        h1 = main.compute_content_hash('Original English Title', 'Original English Content')
+        conn.execute("""
+            INSERT INTO articles (id, url, source, title, content, published_at, crawled_at, major_category, tags)
+            VALUES (1, 'https://dev.to/1', 'devto', 'Original English Title', 'Original English Content',
+                    '2026-11-12T00:00:00Z', '2026-11-12T01:00:00', 'AI', '["AI"]')
+        """)
+        conn.execute("""
+            INSERT INTO article_translations
+                (article_id, content_hash, translated_title, translated_content, language, status, completed_at, model, created_at, updated_at)
+            VALUES (1, ?, '한국어로 번역된 제목', '한국어로 번역된 본문 내용', 'ko', 'completed',
+                    '2026-11-12T01:05:00', 'gemini-2.5-flash', '2026-11-12T01:00:00', '2026-11-12T01:05:00')
+        """, (h1,))
+
+        # 2. 미번역 영문 기사 (huggingface)
+        conn.execute("""
+            INSERT INTO articles (id, url, source, title, content, published_at, crawled_at, major_category, tags)
+            VALUES (2, 'https://hf.co/2', 'huggingface', 'Untranslated Title', 'Untranslated Content',
+                    '2026-11-12T00:10:00Z', '2026-11-12T01:00:00', 'AI', '["AI"]')
+        """)
+
+        # 3. 한국어 소스 기사 (naver)
+        conn.execute("""
+            INSERT INTO articles (id, url, source, title, content, published_at, crawled_at, major_category, tags)
+            VALUES (3, 'https://naver.com/3', 'naver', '네이버 한국어 뉴스', '한국어 원문 내용',
+                    '2026-11-12T00:20:00+09:00', '2026-11-12T01:00:00', 'IT', '["IT"]')
+        """)
         conn.commit()
 
 
 class TestTranslatedArticlesAPI(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        init_test_db(temp_db_path)
-        cls.client = TestClient(main.app)
+    def setUp(self):
+        self.temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.temp_db_path = self.temp_db.name
+        self.temp_db.close()
+        os.environ["DB_PATH"] = self.temp_db_path
+        init_test_db(self.temp_db_path)
+        self.client = TestClient(main.app)
 
-        # 샘플 데이터 삽입
-        with sqlite3.connect(temp_db_path) as conn:
-            # 1. 번역 완료된 영문 기사 (devto)
-            h1 = main.compute_content_hash('Original English Title', 'Original English Content')
-            conn.execute("""
-                INSERT INTO articles (id, url, source, title, content, published_at, crawled_at, major_category, tags)
-                VALUES (1, 'https://dev.to/1', 'devto', 'Original English Title', 'Original English Content',
-                        '2026-11-12T00:00:00Z', '2026-11-12T01:00:00', 'AI', '["AI"]')
-            """)
-            conn.execute("""
-                INSERT INTO article_translations
-                    (article_id, content_hash, translated_title, translated_content, language, status, completed_at, model, created_at, updated_at)
-                VALUES (1, ?, '한국어로 번역된 제목', '한국어로 번역된 본문 내용', 'ko', 'completed',
-                        '2026-11-12T01:05:00', 'gemini-2.5-flash', '2026-11-12T01:00:00', '2026-11-12T01:05:00')
-            """, (h1,))
-
-            # 2. 미번역 영문 기사 (huggingface)
-            conn.execute("""
-                INSERT INTO articles (id, url, source, title, content, published_at, crawled_at, major_category, tags)
-                VALUES (2, 'https://hf.co/2', 'huggingface', 'Untranslated Title', 'Untranslated Content',
-                        '2026-11-12T00:10:00Z', '2026-11-12T01:00:00', 'AI', '["AI"]')
-            """)
-
-            # 3. 한국어 소스 기사 (naver)
-            conn.execute("""
-                INSERT INTO articles (id, url, source, title, content, published_at, crawled_at, major_category, tags)
-                VALUES (3, 'https://naver.com/3', 'naver', '네이버 한국어 뉴스', '한국어 원문 내용',
-                        '2026-11-12T00:20:00+09:00', '2026-11-12T01:00:00', 'IT', '["IT"]')
-            """)
-            conn.commit()
-
-    @classmethod
-    def tearDownClass(cls):
+    def tearDown(self):
         try:
-            if os.path.exists(temp_db_path):
-                os.remove(temp_db_path)
+            if os.path.exists(self.temp_db_path):
+                os.remove(self.temp_db_path)
         except OSError:
             pass
 
@@ -116,7 +109,6 @@ class TestTranslatedArticlesAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
 
-        # 번역 완료 기사는 title, content에 번역문이 우선 반영됨
         self.assertEqual(data["title"], "한국어로 번역된 제목")
         self.assertEqual(data["content"], "한국어로 번역된 본문 내용")
         self.assertEqual(data["original_title"], "Original English Title")
@@ -130,7 +122,6 @@ class TestTranslatedArticlesAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
 
-        # 미번역 기사는 title, content에 원문 유지 및 translated 필드는 None
         self.assertEqual(data["title"], "Untranslated Title")
         self.assertEqual(data["content"], "Untranslated Content")
         self.assertEqual(data["original_title"], "Untranslated Title")
