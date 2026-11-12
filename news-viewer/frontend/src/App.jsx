@@ -374,6 +374,22 @@ const s = {
     padding: "40px 0",
     fontSize: 14,
   },
+  briefingHeader: {
+    padding: "20px 16px",
+    borderBottom: `1px solid ${BORDER}`,
+    background: ACCENT_LIGHT,
+  },
+  briefingTitle: {
+    margin: "0 0 8px",
+    fontSize: 20,
+    color: "#0f172a",
+  },
+  briefingDescription: {
+    margin: "0 0 10px",
+    fontSize: 13,
+    lineHeight: 1.6,
+    color: TEXT_SECONDARY,
+  },
   emptyState: {
     padding: "48px 16px",
     display: "flex",
@@ -464,6 +480,12 @@ const s = {
 };
 
 export default function App() {
+  const [view, setView] = useState("briefing");
+  const [briefing, setBriefing] = useState(null);
+  const [briefingLoading, setBriefingLoading] = useState(true);
+  const [briefingError, setBriefingError] = useState("");
+  const [briefingRetry, setBriefingRetry] = useState(0);
+
   const [categories, setCategories] = useState([]);
   const [sources, setSources] = useState([]);
   const [totalAll, setTotalAll] = useState(0);
@@ -487,11 +509,16 @@ export default function App() {
   const reqIdRef = useRef(0);
   const activeReqRef = useRef(0);
 
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
   const isCompactRef = useRef(isCompact);
   useEffect(() => {
     isCompactRef.current = isCompact;
-    dispatch({ type: "RESIZE_VIEWPORT", isCompact });
-  }, [isCompact]);
+    dispatch({ type: "RESIZE_VIEWPORT", isCompact, view });
+  }, [isCompact, view]);
 
   const listRef = useRef(null);
   const listScrollPos = useRef(0);
@@ -518,6 +545,28 @@ export default function App() {
   }, [selected, isCompact]);
 
   const SIZE = 20;
+
+  useEffect(() => {
+    if (view !== "briefing") return;
+    const controller = new AbortController();
+    setSelected(null);
+    setBriefingLoading(true);
+    setBriefingError("");
+    fetchJSON("/briefing", controller.signal)
+      .then((data) => {
+        setBriefing(data);
+        if (!isCompactRef.current && (data?.articles || []).length > 0) {
+          setSelected(data.articles[0]);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setBriefingError("브리핑을 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setBriefingLoading(false);
+      });
+    return () => controller.abort();
+  }, [view, briefingRetry]);
 
   useEffect(() => {
     const media = window.matchMedia(COMPACT_QUERY);
@@ -549,7 +598,7 @@ export default function App() {
 
   const startFetch = () => {
     const nextReqId = ++reqIdRef.current;
-    dispatch({ type: "START_FETCH", requestId: nextReqId });
+    dispatch({ type: "START_FETCH", requestId: nextReqId, view: viewRef.current });
     return nextReqId;
   };
 
@@ -579,6 +628,7 @@ export default function App() {
           articles: data.articles,
           total: data.total,
           isCompact: isCompactRef.current,
+          view: viewRef.current,
         });
       })
       .catch(() => {
@@ -594,6 +644,18 @@ export default function App() {
     return () => controller.abort();
   }, [page, selectedCategory, selectedSource, search, fetchRev]);
 
+  useEffect(() => {
+    if (view === "briefing" && !isCompact && !briefingLoading && !selected && (briefing?.articles || []).length > 0) {
+      setSelected(briefing.articles[0]);
+    }
+  }, [view, isCompact, briefingLoading, selected, briefing]);
+
+  useEffect(() => {
+    if (view === "articles" && !isCompact && !loading && !selected && articles.length > 0) {
+      setSelected(articles[0]);
+    }
+  }, [view, isCompact, loading, selected, articles]);
+
   const totalPages = Math.ceil(total / SIZE);
   const categoryItems = [
     { major_category: "", count: totalAll },
@@ -608,24 +670,27 @@ export default function App() {
   ];
 
   const handleCategoryClick = (cat) => {
+    setView("articles");
     setFiltersOpen(false);
     triggerFetch();
-    setSelectedCategory(cat);
+    setSelectedCategory((prev) => (prev === cat ? "" : cat));
     setPage(1);
     listScrollPos.current = 0;
     if (listRef.current) listRef.current.scrollTop = 0;
   };
 
   const handleSourceClick = (src) => {
+    setView("articles");
     setFiltersOpen(false);
     triggerFetch();
-    setSelectedSource(src);
+    setSelectedSource((prev) => (prev === src ? "" : src));
     setPage(1);
     listScrollPos.current = 0;
     if (listRef.current) listRef.current.scrollTop = 0;
   };
 
   const handleResetFilters = () => {
+    setView("articles");
     triggerFetch();
     setSelectedCategory("");
     setSelectedSource("");
@@ -635,6 +700,7 @@ export default function App() {
   };
 
   const handleResetSearch = () => {
+    setView("articles");
     triggerFetch();
     setQuery("");
     setSearch("");
@@ -645,6 +711,7 @@ export default function App() {
 
   const handleSearchSubmit = (e) => {
     e?.preventDefault();
+    setView("articles");
     triggerFetch();
     setSearch(query);
     setPage(1);
@@ -681,6 +748,28 @@ export default function App() {
           )}
         </div>
         <div id="news-filters" hidden={isCompact && !filtersOpen} style={{ ...s.sidebarScroll, ...(isCompact ? s.compactFilters : {}) }}>
+          <div style={s.sectionLabel}>보기</div>
+          {[
+            { id: "briefing", label: "오늘의 AI 브리핑" },
+            { id: "articles", label: "전체 기사" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={view === item.id}
+              style={{ ...s.filterItem(view === item.id), ...s.filterControl }}
+              onClick={() => {
+                if (view !== item.id) {
+                  setView(item.id);
+                  setSelected(null);
+                }
+                setFiltersOpen(false);
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+
           <div style={{ ...s.sectionLabel, marginTop: 4 }}>카테고리</div>
           {categoryItems.map((c) => (
             <button
@@ -739,7 +828,7 @@ export default function App() {
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSearchSubmit(e);
             }}
-            placeholder="기사 제목, 요약으로 검색..."
+            placeholder="기사 제목, 본문으로 검색..."
             style={s.searchInput}
           />
           <button
@@ -750,12 +839,60 @@ export default function App() {
           </button>
         </div>
 
-        {(error || metadataError) && <div role="alert" style={s.error}>{error || metadataError}</div>}
+        {((view === "articles" && error) || metadataError) && (
+          <div role="alert" style={s.error}>
+            {(view === "articles" && error) || metadataError}
+          </div>
+        )}
 
         <div style={s.content}>
-          {/* Article List */}
-          <div ref={listRef} aria-label="기사 목록" style={{ ...s.listPanel, ...(isCompact ? s.compactList : {}), ...(isCompact && selected ? { display: "none" } : {}) }}>
-            {(selectedCategory || selectedSource) && (
+          {/* Article List / Briefing List */}
+          <div
+            ref={listRef}
+            aria-label={view === "briefing" ? "오늘의 AI 브리핑 목록" : "기사 목록"}
+            style={{
+              ...s.listPanel,
+              ...(isCompact ? s.compactList : {}),
+              ...(isCompact && selected ? { display: "none" } : {}),
+            }}
+          >
+            {view === "briefing" && (
+              <section aria-label="오늘의 AI 브리핑" style={s.briefingHeader}>
+                <h2 style={s.briefingTitle}>오늘의 AI 브리핑</h2>
+                <p style={s.briefingDescription}>최근 24시간의 AI 소식 최대 5개를 모았습니다.</p>
+                <p style={s.briefingDescription}>주제·출처 다양성과 최신순을 반영한 선정입니다.</p>
+                {briefing && (
+                  <p style={s.briefingDescription}>
+                    조회 시각: {new Date(briefing.generated_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} (한국 시간)
+                  </p>
+                )}
+                <button
+                  type="button"
+                  style={s.filterButton}
+                  disabled={briefingLoading}
+                  onClick={() => setBriefingRetry((n) => n + 1)}
+                >
+                  새로고침
+                </button>
+              </section>
+            )}
+
+            {view === "briefing" && briefingLoading && (
+              <div role="status" style={s.statusText}>브리핑을 불러오는 중...</div>
+            )}
+            {view === "briefing" && briefingError && (
+              <div role="alert" style={s.error}>
+                {briefingError}{" "}
+                <button type="button" style={s.filterButton} onClick={() => setBriefingRetry((n) => n + 1)}>
+                  다시 시도
+                </button>
+              </div>
+            )}
+            {view === "briefing" && !briefingLoading && !briefingError && (briefing?.articles || []).length === 0 && (
+              <div style={s.statusText}>최근 24시간에 수집된 AI 기사가 없습니다.</div>
+            )}
+
+            {view === "articles" && (selectedCategory || selectedSource) && (
               <div style={s.activeFilterBar} aria-label="활성 필터">
                 <span style={s.activeFilterLabel}>적용된 필터:</span>
                 {selectedCategory && (
@@ -790,8 +927,8 @@ export default function App() {
               </div>
             )}
 
-            {loading && <div style={s.statusText}>불러오는 중...</div>}
-            {!loading && !error && articles.length === 0 && (
+            {view === "articles" && loading && <div style={s.statusText}>불러오는 중...</div>}
+            {view === "articles" && !loading && !error && articles.length === 0 && (
               search ? (
                 <div style={s.emptyState}>
                   <div style={s.emptyIcon} aria-hidden="true">🔍</div>
@@ -813,36 +950,43 @@ export default function App() {
                 <div style={s.statusText}>기사가 없습니다</div>
               )
             )}
-            {!loading && articles.map((a) => (
-              <button
-                type="button"
-                key={a.id}
-                aria-pressed={selected?.id === a.id}
-                onClick={() => handleSelectArticle(a)}
-                style={s.card(selected?.id === a.id)}
-              >
-                <div style={s.cardMeta}>
-                  <span>{a.source}</span>
-                  <span style={s.cardDot} />
-                  <span>{a.major_category}</span>
-                </div>
-                <div style={s.cardTitle}>{a.title}</div>
-                {a.summary && (
-                  <div style={s.cardSummary}>
-                    {a.summary.slice(0, 90)}…
-                  </div>
-                )}
-                {(a.tags || []).length > 0 && (
-                  <div style={s.tagRow}>
-                    {(a.tags || []).slice(0, 3).map((t) => (
-                      <span key={t} style={s.tag}>{t}</span>
-                    ))}
-                  </div>
-                )}
-              </button>
-            ))}
 
-            {totalPages > 1 && (
+            {(view === "briefing"
+              ? (!briefingLoading && !briefingError ? briefing?.articles || [] : [])
+              : (!loading ? articles : [])
+            ).map((a) => {
+              const previewText = a.summary || a.content;
+              return (
+                <button
+                  type="button"
+                  key={a.id}
+                  aria-pressed={selected?.id === a.id}
+                  onClick={() => handleSelectArticle(a)}
+                  style={s.card(selected?.id === a.id)}
+                >
+                  <div style={s.cardMeta}>
+                    <span>{a.source}</span>
+                    <span style={s.cardDot} />
+                    <span>{a.major_category}</span>
+                  </div>
+                  <div style={s.cardTitle}>{a.title}</div>
+                  {previewText && (
+                    <div style={s.cardSummary}>
+                      {previewText.slice(0, 90)}{previewText.length > 90 ? "…" : ""}
+                    </div>
+                  )}
+                  {(a.tags || []).length > 0 && (
+                    <div style={s.tagRow}>
+                      {(a.tags || []).slice(0, 3).map((t) => (
+                        <span key={t} style={s.tag}>{t}</span>
+                      ))}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+
+            {view === "articles" && totalPages > 1 && (
               <div style={s.pagination}>
                 <button
                   onClick={() => handlePageChange(Math.max(1, page - 1))}
@@ -864,17 +1008,32 @@ export default function App() {
           </div>
 
           {/* Article Detail */}
-          <div aria-label="기사 상세" style={{ ...s.detailPanel, ...(isCompact ? s.compactDetail : {}), ...(isCompact && !selected ? { display: "none" } : {}) }}>
+          <div
+            aria-label="기사 상세"
+            style={{
+              ...s.detailPanel,
+              ...(isCompact ? s.compactDetail : {}),
+              ...(isCompact && !selected ? { display: "none" } : {}),
+            }}
+          >
             {!selected ? (
               <div style={s.detailEmpty}>
                 <span style={{ fontSize: 14, color: TEXT_SECONDARY }}>
-                  {loading
-                    ? "기사를 불러오는 중..."
-                    : error
-                    ? "기사를 불러오지 못했습니다"
-                    : articles.length === 0
-                    ? (search ? "검색 결과가 없습니다" : "표시할 기사가 없습니다")
-                    : "기사를 선택하세요"}
+                  {view === "briefing"
+                    ? (briefingLoading
+                        ? "브리핑을 불러오는 중..."
+                        : briefingError
+                        ? "브리핑을 불러오지 못했습니다"
+                        : (briefing?.articles || []).length === 0
+                        ? "최근 24시간에 수집된 AI 기사가 없습니다"
+                        : "기사를 선택하세요")
+                    : (loading
+                        ? "기사를 불러오는 중..."
+                        : error
+                        ? "기사를 불러오지 못했습니다"
+                        : articles.length === 0
+                        ? (search ? "검색 결과가 없습니다" : "표시할 기사가 없습니다")
+                        : "기사를 선택하세요")}
                 </span>
               </div>
             ) : (
