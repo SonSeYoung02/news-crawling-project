@@ -1,6 +1,6 @@
 # AI 뉴스 수집 · 분석 및 큐레이션 뷰어 (News Crawling & Viewer)
 
-국내외 주요 IT·경제·국제 뉴스와 글로벌 **AI 1차 원천 소스**(GeekNews, Reddit AI, GitHub Trending, Hugging Face, arXiv, dev.to, Google News, 네이버뉴스)를 자동 수집하고, **Google Gemini AI(`gemini-2.5-flash`)**로 한국어 번역·핵심 요약·카테고리 분류를 수행하여 웹 뷰어로 제공하는 통합 파이프라인 프로젝트입니다.
+국내외 주요 IT·경제·국제 뉴스와 글로벌 **AI 1차 원천 소스**(GeekNews, Reddit AI, GitHub Trending, Hugging Face, arXiv, dev.to, Google News, 네이버뉴스)를 매일 새벽 자동 수집하고, **Google Gemini AI** 무료 티어를 통해 영문 기사의 제목과 본문을 한국어로 순차 번역하여 아침 시간대에 웹 뷰어로 편리하게 열람할 수 있도록 제공하는 통합 파이프라인 프로젝트입니다.
 
 ---
 
@@ -10,36 +10,39 @@
 - [2. 사용 기술 스택 (Tech Stack)](#2-사용-기술-스택-tech-stack)
 - [3. 시스템 아키텍처 및 데이터 흐름](#3-시스템-아키텍처-및-데이터-흐름)
 - [4. 프로젝트 전체 구조](#4-프로젝트-전체-구조)
-- [5. 수집 뉴스 소스 및 AI 분석 명세](#5-수집-뉴스-소스-및-ai-분석-명세)
-- [6. 데이터베이스 및 API 명세](#6-데이터베이스-및-api-명세)
+- [5. 수집 뉴스 소스 및 새벽 번역 파이프라인 명세](#5-수집-뉴스-소스-및-새벽-번역-파이프라인-명세)
+- [6. 데이터베이스 스키마 및 API 계약](#6-데이터베이스-스키마-및-api-계약)
 - [7. 시작하기 (설치 및 실행 방법)](#7-시작하기-설치-및-실행-방법)
 
 ---
 
 ## 1. 프로젝트 개요 및 핵심 기능
 
-- **AI 1차 원천 중심 멀티 소스 크롤링**: 일반 가십성 뉴스(정치·사회·연예)를 배제하고, AI·개발 커뮤니티와 논문·오픈소스 트렌드 등 **8개 핵심 채널**에서 최신 정보를 수집합니다.
-- **Gemini AI 기반 자동 번역·요약·분류**:
-  - **영한 자동 번역**: 해외 소스(Reddit AI, GitHub Trending, Hugging Face, arXiv, dev.to, Google News)의 영문 제목과 본문을 자연스러운 한국어로 번역합니다.
-  - **핵심 요약**: 긴 기사 본문을 한국어 **3~5문장**으로 요약합니다.
-  - **자동 분류 및 태깅**: 기사를 대분류(`AI`, `IT`, `경제`, `국제`)와 세부 중분류로 나누고 핵심 키워드 태그(최대 10개)를 추출합니다.
-- **중복 방지 및 분석 보완**: URL 기준 중복 수집을 차단하여 불필요한 LLM API 호출을 방지하며, 기존 수집 기사 중 AI 분석이 누락된 항목은 자동으로 재분석합니다.
-- **직관적인 3단 웹 뷰어**: 출처별 사이드바 필터, 대분류 카테고리 탭, 키워드 검색, 페이지네이션, AI 요약본 및 원문 상세보기를 단일 화면(SPA)에서 제공합니다.
+- **AI 1차 원천 중심 멀티 소스 크롤링**: 일반 가십성 뉴스(정치·사회·연예)를 배제하고, AI·개발 커뮤니티와 논문·오픈소스 트렌드 등 **8개 핵심 채널**에서 최신 원문 정보를 수집하여 즉시 보존합니다.
+- **새벽 01:00 KST 배치 및 Gemini 무료 순차 번역**:
+  - **새벽 1회 실행 스케줄**: 매일 한국 시간(`Asia/Seoul`) **01:00**에 수집을 시작하고, **05:55** 이후 신규 요청을 중단하며 **06:00 전**에 프로세스를 정상 종료합니다.
+  - **무료 티어 번역 집중 투입**: 한정된 무료 API 예산을 가장 가치 있는 곳에 사용하기 위해 요약(`summarize`)과 AI 분류(`classify`) 호출을 전면 배제하고, 모든 무료 쿼터를 **영어 기사 한국어 번역**에만 집중 투입합니다.
+  - **신규 기사 최우선 정렬**: 당일 새로 수집된 최신 기사를 최우선으로 번역하고, 이전 실행의 미번역 기사는 남은 시간과 무료 한도 범위 내에서 후순위로 처리합니다.
+  - **긴 본문 문단 분할(Chunking) 및 재개(Resume)**: 긴 기사는 문단 단위로 분할하여 번역 즉시 영속화하며, 중단 시 이미 번역된 조각은 재호출하지 않고 미완료 조각부터 안전하게 이어받습니다.
+  - **일일 예산 영속화 및 프로세스 락**: SQLite에 일일 호출량을 영속화하여 재시작에도 무료 한도를 초과하지 않으며, 단일 프로세스 락으로 중복 실행을 방지합니다.
+- **한국어 우선 웹 뷰어 및 하위 호환성**:
+  - 백엔드 API는 번역이 완료된 기사의 경우 한국어 번역문을 기본 `title`, `content`로 우선 제공하고, 미번역 기사는 원문으로 안전하게 폴백합니다.
+  - 제목·본문·원문 검색 지원 및 기존 카테고리/태그/요약과의 100% 호환성을 보장합니다.
 
 ---
 
 ## 2. 사용 기술 스택 (Tech Stack)
 
-### Data Collection & AI Pipeline (`news-crawling/`)
+### Data Collection & Translation Pipeline (`news-crawling/`)
 
 | 구분 | 기술 / 라이브러리 | 버전 / 모델 | 주요 활용 내용 |
 | :--- | :--- | :--- | :--- |
-| **Language** | Python | 3.11+ | 크롤러 및 LLM 분석 파이프라인 전반 |
-| **LLM / AI** | `google-genai` | `gemini-2.5-flash` | 영문 기사 한국어 번역, 3~5문장 요약, 대·중분류 및 태그 추출 |
+| **Language** | Python | 3.11+ / 3.14 | 크롤러 및 번역 파이프라인 전반 |
+| **LLM / AI** | `google-genai` | `gemini-2.5-flash` (무료 티어 후보) | 영문 기사 제목 및 본문 한국어 순차 번역 (무료 한도 준수) |
 | **HTTP Client** | `httpx` | `>=0.27.0` | 비동기/동기 HTTP 요청, 리다이렉트 추적, 타임아웃 및 헤더 제어 |
 | **HTML / XML Parser** | `beautifulsoup4`, `lxml` | `>=4.12.0`, `>=5.0.0` | HTML DOM 파싱 및 RSS/Atom XML 피드 파싱 |
 | **Article Extractor** | `trafilatura` | `>=1.12.0` | 뉴스 웹페이지 내 본문 텍스트 정밀 추출 |
-| **Scheduler** | `APScheduler` | `>=3.10.0` | 매일 지정 시각(`Asia/Seoul` 08:00) 정기 크롤링 스케줄링 |
+| **Scheduler** | `APScheduler` | `>=3.10.0` | 매일 새벽(`Asia/Seoul` 01:00) 정기 크롤링 및 번역 스케줄링 |
 
 ### Backend & Database (`news-viewer/backend/`)
 
@@ -48,7 +51,7 @@
 | **API Framework** | `FastAPI` | `>=0.115.0` | 기사 목록·상세·카테고리·출처 조회 REST API 및 Swagger(`/docs`) 제공 |
 | **ASGI Server** | `uvicorn` | `>=0.30.0` | FastAPI 애플리케이션 서버 구동 |
 | **Validation** | `Pydantic` | v2 | API 응답 스키마(`Article`, `ArticleListResponse` 등) 모델링 |
-| **Database** | `SQLite3` | Built-in | `news-crawling/news.db` 단일 파일 영속화 (`articles`, `article_analysis`) |
+| **Database** | `SQLite3` | Built-in | `news-crawling/news.db` 영속화 (원문, 번역문, 분할 조각, 일일 쿼터, 락) |
 
 ### Frontend (`news-viewer/frontend/`)
 
@@ -62,207 +65,110 @@
 
 ## 3. 시스템 아키텍처 및 데이터 흐름
 
-```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│                        1. 수집 파이프라인 (news-crawling)                    │
-│                                                                            │
-│  [국내/글로벌 8대 소스]                                                     │
-│   ├─ 네이버뉴스 (HTML)       ├─ GitHub Trending (HTML)                     │
-│   ├─ Google News (RSS)       ├─ Hugging Face (RSS / HTML)                  │
-│   ├─ GeekNews (Atom/RSS)     ├─ arXiv (Atom API)                           │
-│   └─ Reddit AI (RSS)         └─ dev.to (JSON API)                          │
-│               │                                                            │
-│               ▼                                                            │
-│     URL 중복 검사 (db.py) ──(기존 기사 & 분석 누락 시)──► 보완 분석 수행     │
-│               │ (신규 기사)                                                │
-│               ▼                                                            │
-│     Gemini 2.5 Flash 분석 (llm/analyzer.py)                                │
-│      ① 영문 기사 한국어 번역 (translate_article_to_korean)                 │
-│      ② 한국어 3~5문장 핵심 요약 (summarize)                                │
-│      ③ 대분류(AI/IT/경제/국제)·중분류·태그 분류 (classify)                 │
-└───────────────┬────────────────────────────────────────────────────────────┘
-                │
-                ▼  SQLite 저장
-┌────────────────────────────────────────────────────────────────────────────┐
-│                   2. 공유 데이터베이스 (news-crawling/news.db)              │
-│           [ articles 테이블 ]  ◄──── JOIN ────►  [ article_analysis 테이블 ]│
-└───────────────┬────────────────────────────────────────────────────────────┘
-                │
-                ▼  SQL 조회 (COALESCE 조인)
-┌────────────────────────────────────────────────────────────────────────────┐
-│                     3. 백엔드 API 서버 (news-viewer/backend)                │
-│        FastAPI (:8000) ── GET /articles, /categories, /sources             │
-└───────────────┬────────────────────────────────────────────────────────────┘
-                │
-                ▼  REST API (JSON)
-┌────────────────────────────────────────────────────────────────────────────┐
-│                    4. 프론트엔드 웹 뷰어 (news-viewer/frontend)             │
-│        React 18 + Vite (:5173) ── 출처·카테고리 필터 / 검색 / 상세 뷰       │
-└────────────────────────────────────────────────────────────────────────────┘
+```
+[다중 뉴스 소스 (8종)]
+ (네이버, 긱뉴스, 구글뉴스, 레딧, 깃허브, 허깅페이스, arXiv, dev.to)
+       │
+       ▼ (매일 01:00 KST)
+[news-crawling: main.py]
+       │
+       ├─ 1. 원문 수집 및 DB 즉시 저장 ───► [SQLite: articles]
+       │                                         ▲
+       ├─ 2. 번역 대기열 구성 (신규 우선)            │
+       │                                         │
+       ├─ 3. Gemini 무료 API 순차 번역 (01:00~05:55) │
+       │     (문단 청크 저장, 한도/마감 제어)        │
+       ▼                                         ▼
+[SQLite: article_translations, chunks] ◄── 조인 / 폴백 조회
+       ▲
+       │ (REST API GET)
+[news-viewer/backend (FastAPI)]
+       │
+       ▼ (HTTP/JSON)
+[news-viewer/frontend (React)]
+ (번역 완료 기사는 한국어 우선 표시, 미번역 기사는 원문 표시)
 ```
 
 ---
 
 ## 4. 프로젝트 전체 구조
 
-```text
+```
 news-crawling-project/
-├── news-crawling/                  # [Python 뉴스 크롤링 & Gemini 분석 파이프라인]
-│   ├── crawlers/                   # 소스별 수집 어댑터 (표준 fetch() 인터페이스)
-│   │   ├── __init__.py             # 8개 수집 소스 통합 호출 (get_all_articles)
-│   │   ├── _rss.py                 # RSS 공통 파서 및 본문 추출 유틸리티
-│   │   ├── naver.py                # 네이버뉴스 (IT/과학, 경제, 국제 섹션)
-│   │   ├── google_news.py          # Google News (글로벌 경제 및 AI 검색 RSS)
-│   │   ├── geeknews.py             # GeekNews (기술/AI 트렌드 Atom/RSS)
-│   │   ├── reddit_ai.py            # Reddit AI (r/LocalLLaMA, r/singularity RSS)
-│   │   ├── github_trending.py      # GitHub Trending (AI/LLM 트렌딩 오픈소스)
-│   │   ├── huggingface.py          # Hugging Face (공식 블로그 RSS 및 Daily Papers)
-│   │   ├── arxiv.py                # arXiv (최신 AI/CS 논문 Atom API)
-│   │   └── devto.py                # dev.to (AI 태그 인기 글 JSON API)
-│   ├── llm/
+├── news-crawling/                  # [Python 뉴스 크롤링 & Gemini 번역 파이프라인]
+│   ├── crawlers/                   # 소스별 수집 어댑터 (get_all_articles)
+│   ├── translation/                # 번역 파이프라인 모듈
 │   │   ├── __init__.py
-│   │   └── analyzer.py             # Gemini API 클라이언트 (번역·요약·분류, 재시도 로직)
-│   ├── config.py                   # 환경 변수(.env), 모델명, 카테고리, 타임아웃 설정
-│   ├── db.py                       # SQLite 테이블 초기화 및 기사·분석 결과 CRUD
-│   ├── main.py                     # CLI 진입점 (--run 즉시 실행 / --schedule 정기 실행)
+│   │   ├── queue.py                # 신규 우선 번역 대기열 큐
+│   │   ├── chunker.py              # 긴 본문 문단/문장 단위 분할기
+│   │   ├── translator.py           # Gemini API 번역 및 부분 조각 재개(Resume)
+│   │   └── rate_limiter.py         # 무료 한도(RPM/RPD) 및 05:55 마감 통제
+│   ├── config.py                   # 환경 변수, 스케줄 시각(01:00), 무료 한도 설정
+│   ├── db.py                       # SQLite 테이블 초기화, 원문/번역문/쿼터/락 CRUD
+│   ├── main.py                     # CLI 진입점 (--run 즉시 실행 / --schedule 새벽 스케줄러)
 │   ├── requirements.txt            # 크롤러 Python 패키지 의존성
 │   └── README.md                   # 크롤링 파이프라인 상세 문서
 │
 ├── news-viewer/                    # [풀스택 뉴스 큐레이션 웹 뷰어]
 │   ├── backend/                    # FastAPI REST API 서버
-│   │   ├── main.py                 # API 엔드포인트 정의 및 SQLite 연동
+│   │   ├── main.py                 # 번역문 우선 제공 API 엔드포인트
 │   │   ├── requirements.txt        # 백엔드 Python 패키지 의존성
 │   │   └── README.md               # 백엔드 API 상세 문서
 │   └── frontend/                   # React 18 + Vite 프론트엔드 SPA
-│       ├── public/                 # 정적 에셋 (favicon.svg, icons.svg)
-│       ├── src/
-│       │   ├── App.jsx             # 메인 뉴스 뷰어 UI (필터, 검색, 목록, 상세 패널)
-│       │   ├── main.jsx            # React DOM 마운트 진입점
-│       │   └── index.css           # 글로벌 스타일 리셋
-│       ├── index.html              # HTML 엔트리포인트
-│       ├── package.json            # 프론트엔드 의존성 및 스크립트
-│       ├── vite.config.js          # Vite 번들러 설정
-│       └── README.md               # 프론트엔드 상세 문서
 │
-├── .github/                        # GitHub 이슈 및 PR 템플릿
-│   ├── ISSUE_TEMPLATE/             # feature.yml, task.yml
-│   └── PULL_REQUEST_TEMPLATE.md
-├── start.ps1                       # Windows 원클릭 통합 실행 스크립트
+├── start.ps1                       # Windows 실행 스크립트
 └── README.md                       # 프로젝트 메인 문서
 ```
 
 ---
 
-## 5. 수집 뉴스 소스 및 AI 분석 명세
+## 5. 수집 뉴스 소스 및 새벽 번역 파이프라인 명세
 
 ### 5.1 수집 소스 (8종)
 
 | 출처명 (`source`) | 수집 방식 | 수집 대상 및 특징 | 기본 대분류 | 한국어 번역 |
 | :--- | :--- | :--- | :---: | :---: |
 | **네이버뉴스** | HTML 파싱 | IT/과학(`105`), 경제(`101`), 국제(`001`) 섹션별 최신 기사 | 섹션별(`IT`/`경제`/`국제`) | X (원문 한국어) |
-| **Google News** | RSS + 본문 추출 | 글로벌 경제 및 `artificial intelligence / LLM / generative AI` 쿼리 | `경제` / `AI` | O |
+| **Google News** | RSS + 본문 추출 | 글로벌 경제 및 AI 검색 RSS | `경제` / `AI` | O (순차 번역) |
 | **GeekNews** | Atom / RSS 파싱 | 긱뉴스 최신 개발·기술·AI 토픽 요약본 | `AI` | X (원문 한국어) |
-| **Reddit AI** | RSS 파싱 | `r/LocalLLaMA`, `r/singularity` 서브레딧 상위 화제 글 | `AI` | O |
-| **GitHub Trending** | HTML 파싱 | 일간 트렌딩 저장소 중 AI/LLM/Agent 관련 오픈소스 프로젝트 | `AI` | O |
-| **Hugging Face** | RSS / HTML 파싱 | Hugging Face 공식 블로그 및 Daily Papers 최신 모델·논문 소식 | `AI` | O |
-| **arXiv** | Atom API | Computer Science / AI 분야 논문 초록(Abstract) 및 메타데이터 | `AI` | O |
-| **dev.to** | REST JSON API | `ai` 태그 인기 기술 아티클 및 본문 | `AI` | O |
+| **Reddit AI** | RSS 파싱 | `r/LocalLLaMA`, `r/singularity` 서브레딧 상위 화제 글 | `AI` | O (순차 번역) |
+| **GitHub Trending** | HTML 파싱 | 일간 트렌딩 저장소 중 AI/LLM 오픈소스 프로젝트 | `AI` | O (순차 번역) |
+| **Hugging Face** | RSS / HTML 파싱 | Hugging Face 공식 블로그 및 Daily Papers | `AI` | O (순차 번역) |
+| **arXiv** | Atom API | Computer Science / AI 분야 논문 초록 | `AI` | O (순차 번역) |
+| **dev.to** | REST JSON API | `ai` 태그 인기 기술 아티클 및 본문 | `AI` | O (순차 번역) |
 
-### 5.2 Gemini LLM 분석 항목 (`llm/analyzer.py`)
+### 5.2 번역 운영 정책
 
-- **모델**: `gemini-2.5-flash` (최대 3회 지수 백오프 재시도 적용)
-- **번역 (`translate_article_to_korean`)**: 영문 기사의 제목과 본문을 한국어로 번역하여 JSON으로 반환합니다.
-- **요약 (`summarize`)**: 기사 본문(최대 3,000자)을 바탕으로 핵심 내용을 한국어 3~5문장으로 요약합니다.
-- **분류 (`classify`)**:
-  - **대분류 (`major_category`)**: `AI`, `IT`, `경제`, `국제` (분류 실패 시 크롤러의 기본 카테고리로 폴백)
-  - **중분류 (`sub_category`)**: 세부 주제 (예: `LLM`, `오픈소스`, `반도체`, `거시경제` 등)
-  - **태그 (`tags`)**: 핵심 키워드 배열 (최대 10개)
-
----
-
-## 6. 데이터베이스 및 API 명세
-
-### 6.1 SQLite 스키마 (`news-crawling/news.db`)
-
-- **`articles` 테이블**: 수집된 기사 원문(또는 번역본), URL(UNIQUE), 출처, 발행일, 수집 시각 저장
-- **`article_analysis` 테이블**: `article_id`(FK, UNIQUE) 기준 요약(`summary`), 대분류(`major_category`), 중분류(`sub_category`), 태그(`tags` JSON 배열), 분석 시각(`analyzed_at`) 저장
-
-### 6.2 백엔드 REST API (`http://localhost:8000`)
-
-| 메서드 | 엔드포인트 | 설명 | 주요 쿼리 파라미터 |
-| :---: | :--- | :--- | :--- |
-| `GET` | `/articles` | 기사 목록 조회 (최신순, 페이지네이션 및 필터) | `page`(기본 1), `size`(기본 20), `category`, `source`, `q`(검색어) |
-| `GET` | `/articles/{article_id}` | 특정 기사 상세 정보 조회 | - |
-| `GET` | `/categories` | 대분류 카테고리별 기사 수 집계 조회 | - |
-| `GET` | `/sources` | 출처(언론사/플랫폼)별 기사 수 집계 조회 | - |
-| `GET` | `/docs` | Swagger UI 인터랙티브 API 문서 | - |
+1. **시간 정책**: 매일 01:00 KST 시작. 05:55 이후 신규 요청 시작 금지, 06:00 이전 안전 종료.
+2. **무료 한도 준수**: 설정된 RPM(분당 요청 수) 및 일일 요청 수(RPD)를 초과하지 않으며, 일일 사용량을 SQLite에 영속화.
+3. **우선순위**:
+   - 1순위: 이번 실행에서 신규 수집된 영어 기사
+   - 2순위: 이전 실행의 미완료 영어 기사 및 원문 갱신 기사
+   - 정렬: 정규화된 발행시각 내림차순, 수집시각 내림차순, ID 오름차순
+4. **부분 완료 재개(Resume)**: 긴 기사는 문단 단위 분할 후 조각별 저장. 중단 시 다음 날 완료된 조각은 재호출 없이 미완료 조각부터 이어받아 번역.
 
 ---
 
-## 7. 시작하기 (설치 및 실행 방법)
+## 6. 데이터베이스 스키마 및 API 계약
 
-### 7.1 사전 요구사항
+### 6.1 공유 SQLite 스키마 (`news-crawling/news.db`)
 
-- **Python** 3.11 이상
-- **Node.js** 18 이상 및 `npm`
-- **Google Gemini API Key** ([Google AI Studio](https://aistudio.google.com)에서 발급)
+- **`articles`**: 크롤링 수집 원문 보존 테이블
+  - `id`, `url`(UNIQUE), `source`, `title`, `content`, `published_at`, `crawled_at`, `summary`, `major_category`, `sub_category`, `tags`
+- **`article_translations`**: 기사별 한국어 번역문 테이블
+  - `id`, `article_id`, `content_hash`, `translated_title`, `translated_content`, `language`('ko'), `status`('pending'|'in_progress'|'completed'|'failed'), `attempts`, `completed_at`, `model`, `last_error`, `created_at`, `updated_at`, `UNIQUE(article_id, content_hash)`
+- **`translation_chunks`**: 긴 본문의 조각별 번역 영속화 테이블
+  - `id`, `article_id`, `content_hash`, `chunk_index`, `total_chunks`, `original_chunk`, `translated_chunk`, `status`, `completed_at`, `UNIQUE(article_id, content_hash, chunk_index)`
+- **`translation_quota`**: 일일 API 호출량 및 토큰 영속화 테이블
+  - `id`, `date`(UNIQUE), `request_count`, `token_count`, `last_request_at`
+- **`crawl_locks`**: 중복 실행 방지 프로세스 락 테이블
+  - `name`(PK), `acquired_at`, `pid`, `info`
+- **`article_analysis`**: 기존 LLM 분석 데이터 보존 테이블 (하위 호환)
 
-### 7.2 환경 변수 설정
+### 6.2 백엔드 API 계약
 
-`news-crawling/.env` 파일을 생성하거나 시스템 환경 변수로 `GEMINI_API_KEY`를 설정합니다.
-
-```env
-# news-crawling/.env
-GEMINI_API_KEY=your-gemini-api-key-here
-```
-
-### 7.3 의존성 설치
-
-```powershell
-# 1. 크롤러 의존성 설치
-cd news-crawling
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-
-# 2. 백엔드 의존성 설치
-cd ..\news-viewer\backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-
-# 3. 프론트엔드 의존성 설치
-cd ..\frontend
-npm install
-```
-
-### 7.4 실행 방법
-
-#### 방법 A: Windows 통합 실행 스크립트 (`start.ps1`) 사용 (권장)
-
-저장소 루트에서 아래 명령어로 백엔드(`:8000`)와 프론트엔드(`:5173`)를 한 번에 실행할 수 있습니다.
-
-```powershell
-# 뷰어(백엔드 + 프론트엔드) 실행
-.\start.ps1
-
-# 뉴스 크롤링 1회 실행과 함께 뷰어 시작
-.\start.ps1 -Crawl
-```
-
-#### 방법 B: 개별 수동 실행
-
-```powershell
-# 1) 뉴스 수집 및 AI 분석 실행 (news-crawling/)
-cd news-crawling
-python main.py --run        # 1회 즉시 수집 및 분석
-python main.py --schedule   # 매일 08:00 자동 수집 스케줄러 구동
-
-# 2) 백엔드 API 서버 실행 (news-viewer/backend/)
-cd news-viewer/backend
-uvicorn main:app --reload   # http://localhost:8000
-
-# 3) 프론트엔드 개발 서버 실행 (news-viewer/frontend/)
-cd news-viewer/frontend
-npm run dev                 # http://localhost:5173
-```
+- **`GET /articles` & `GET /articles/{id}`**:
+  - `title`, `content`: 번역 완료(`status == 'completed'`) 시 한국어 번역문 우선 반환, 미완료 시 원문 반환.
+  - `original_title`, `original_content`, `translated_title`, `translated_content`, `translation_status` 필드 추가 제공.
+  - `summary`, `major_category`, `sub_category`, `tags`: 기존 분석 데이터 호환 제공.
+  - 검색 파라미터 `q`: 원문 제목, 번역 제목, 원문 본문, 번역 본문, 요약 동시 검색.
