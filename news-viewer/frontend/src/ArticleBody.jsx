@@ -166,6 +166,14 @@ const s = {
     wordBreak: "break-word",
     overflowWrap: "anywhere",
   },
+  img: {
+    maxWidth: "100%",
+    height: "auto",
+    display: "block",
+    margin: "16px auto",
+    borderRadius: 8,
+    boxSizing: "border-box",
+  },
   hr: {
     border: "none",
     borderTop: "1px solid #e5e7eb",
@@ -195,88 +203,120 @@ const s = {
     color: "#374151",
   },
   empty: {
-    fontSize: 15,
-    lineHeight: 1.85,
-    color: "#9ca3af",
-    marginBottom: 28,
+    color: "inherit",
+    whiteSpace: "normal",
   },
 };
 
-const components = {
-  h1: ({ node, children, ...props }) => <h1 style={s.h1} {...props}>{children}</h1>,
-  h2: ({ node, children, ...props }) => <h2 style={s.h2} {...props}>{children}</h2>,
-  h3: ({ node, children, ...props }) => <h3 style={s.h3} {...props}>{children}</h3>,
-  h4: ({ node, children, ...props }) => <h4 style={s.h4} {...props}>{children}</h4>,
-  h5: ({ node, children, ...props }) => <h5 style={s.h5} {...props}>{children}</h5>,
-  h6: ({ node, children, ...props }) => <h6 style={s.h6} {...props}>{children}</h6>,
-  p: ({ node, children, ...props }) => <p style={s.p} {...props}>{children}</p>,
-  strong: ({ node, children, ...props }) => <strong style={s.strong} {...props}>{children}</strong>,
-  em: ({ node, children, ...props }) => <em style={s.em} {...props}>{children}</em>,
-  ul: ({ node, children, ...props }) => <ul style={s.ul} {...props}>{children}</ul>,
-  ol: ({ node, children, ...props }) => <ol style={s.ol} {...props}>{children}</ol>,
-  li: ({ node, children, ...props }) => <li style={s.li} {...props}>{children}</li>,
-  blockquote: ({ node, children, ...props }) => (
-    <blockquote style={s.blockquote} {...props}>{children}</blockquote>
-  ),
-  pre: ({ node, children, ...props }) => (
-    <pre style={s.pre} {...props}>
-      {React.isValidElement(children)
-        ? React.cloneElement(children, { isBlock: true })
-        : children}
-    </pre>
-  ),
-  code: ({ node, className, isBlock, children, ...props }) => {
-    const isCodeBlock = isBlock || Boolean(className);
-    return (
-      <code
-        style={isCodeBlock ? s.codeBlock : s.codeInline}
-        className={className}
-        {...props}
-      >
-        {children}
-      </code>
-    );
-  },
-  a: ({ node, href, children, ...props }) => {
-    if (!href || !isSafeUrl(href)) {
-      return <span style={s.disabledLink}>{children}</span>;
-    }
-    const isExternal =
-      href.startsWith("http://") ||
-      href.startsWith("https://") ||
-      href.startsWith("//");
-    return (
-      <a
-        href={href}
-        target={isExternal ? "_blank" : undefined}
-        rel={isExternal ? "noopener noreferrer" : undefined}
-        style={s.link}
-        {...props}
-      >
-        {children}
-      </a>
-    );
-  },
-  hr: ({ node, ...props }) => <hr style={s.hr} {...props} />,
-  table: ({ node, children, ...props }) => (
-    <div style={s.tableWrapper}>
-      <table style={s.table} {...props}>
-        {children}
-      </table>
-    </div>
-  ),
-  th: ({ node, children, ...props }) => <th style={s.th} {...props}>{children}</th>,
-  td: ({ node, children, ...props }) => <td style={s.td} {...props}>{children}</td>,
-};
-
-export default function ArticleBody({ content }) {
+export default function ArticleBody({ content, style }) {
   const cleaned = cleanArticleText(content);
+
+  const containerStyle = {
+    ...s.container,
+    ...style,
+    whiteSpace: "normal",
+  };
+
   if (!cleaned) {
-    return <div style={s.empty}>이 기사는 원문 본문을 가져오지 못했습니다.</div>;
+    return (
+      <div style={{ ...containerStyle, ...s.empty }}>
+        이 기사는 원문 본문을 가져오지 못했습니다.
+      </div>
+    );
   }
 
+  const pStyle = {
+    ...s.p,
+    ...(style?.fontSize ? { fontSize: style.fontSize } : {}),
+    ...(style?.lineHeight ? { lineHeight: style.lineHeight } : {}),
+    ...(style?.color ? { color: style.color } : {}),
+  };
+
+  const liStyle = {
+    ...s.li,
+    ...(style?.fontSize ? { fontSize: style.fontSize } : {}),
+    ...(style?.lineHeight ? { lineHeight: style.lineHeight } : {}),
+    ...(style?.color ? { color: style.color } : {}),
+  };
+
+  const components = {
+    h1: ({ node, children, ...props }) => <h1 style={s.h1} {...props}>{children}</h1>,
+    h2: ({ node, children, ...props }) => <h2 style={s.h2} {...props}>{children}</h2>,
+    h3: ({ node, children, ...props }) => <h3 style={s.h3} {...props}>{children}</h3>,
+    h4: ({ node, children, ...props }) => <h4 style={s.h4} {...props}>{children}</h4>,
+    h5: ({ node, children, ...props }) => <h5 style={s.h5} {...props}>{children}</h5>,
+    h6: ({ node, children, ...props }) => <h6 style={s.h6} {...props}>{children}</h6>,
+    p: ({ node, children, ...props }) => <p style={pStyle} {...props}>{children}</p>,
+    strong: ({ node, children, ...props }) => <strong style={s.strong} {...props}>{children}</strong>,
+    em: ({ node, children, ...props }) => <em style={s.em} {...props}>{children}</em>,
+    ul: ({ node, children, ...props }) => <ul style={s.ul} {...props}>{children}</ul>,
+    ol: ({ node, children, ...props }) => <ol style={s.ol} {...props}>{children}</ol>,
+    li: ({ node, children, ...props }) => <li style={liStyle} {...props}>{children}</li>,
+    blockquote: ({ node, children, ...props }) => (
+      <blockquote style={s.blockquote} {...props}>{children}</blockquote>
+    ),
+    pre: ({ node, children, ...props }) => (
+      <pre style={s.pre} {...props}>
+        {React.isValidElement(children)
+          ? React.cloneElement(children, { isBlock: true })
+          : children}
+      </pre>
+    ),
+    code: ({ node, className, isBlock, children, ...props }) => {
+      const isCodeBlock = isBlock || Boolean(className);
+      return (
+        <code
+          style={isCodeBlock ? s.codeBlock : s.codeInline}
+          className={className}
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    },
+    a: ({ node, href, children, ...props }) => {
+      if (!href || !isSafeUrl(href)) {
+        return <span style={s.disabledLink}>{children}</span>;
+      }
+      const isExternal =
+        href.startsWith("http://") ||
+        href.startsWith("https://") ||
+        href.startsWith("//");
+      return (
+        <a
+          href={href}
+          target={isExternal ? "_blank" : undefined}
+          rel={isExternal ? "noopener noreferrer" : undefined}
+          style={s.link}
+          {...props}
+        >
+          {children}
+        </a>
+      );
+    },
+    img: ({ node, src, alt, ...props }) => (
+      <img
+        src={src}
+        alt={alt || ""}
+        style={s.img}
+        loading="lazy"
+        {...props}
+      />
+    ),
+    hr: ({ node, ...props }) => <hr style={s.hr} {...props} />,
+    table: ({ node, children, ...props }) => (
+      <div style={s.tableWrapper}>
+        <table style={s.table} {...props}>
+          {children}
+        </table>
+      </div>
+    ),
+    th: ({ node, children, ...props }) => <th style={s.th} {...props}>{children}</th>,
+    td: ({ node, children, ...props }) => <td style={s.td} {...props}>{children}</td>,
+  };
+
   return (
-    <div style={s.container}>
+    <div style={containerStyle}>
       <ReactMarkdown
         remarkPlugins={[remarkBreaks, remarkGfm]}
         urlTransform={safeUrlTransform}

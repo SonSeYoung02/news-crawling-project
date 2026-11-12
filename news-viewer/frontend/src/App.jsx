@@ -297,6 +297,13 @@ const s = {
     lineHeight: 1.75,
     color: "#374151",
   },
+  detailContent: {
+    fontSize: 15,
+    lineHeight: 1.85,
+    color: "#374151",
+    whiteSpace: "pre-wrap",
+    marginBottom: 28,
+  },
   statusText: {
     textAlign: "center",
     color: TEXT_MUTED,
@@ -588,7 +595,7 @@ export default function App() {
                     <div style={s.summaryText}>{selected.summary}</div>
                   </div>
                 )}
-                <ArticleBody content={selected.content} />
+                <ArticleBody content={selected.content} style={s.detailContent} />
                 {(selected.tags || []).length > 0 && (
                   <div style={s.tagRow}>
                     {(selected.tags || []).map((t) => (
