@@ -43,7 +43,7 @@ class Article(BaseModel):
     original_content: Optional[str] = None
     translated_title: Optional[str] = None
     translated_content: Optional[str] = None
-    translation_status: Optional[str] = "untranslated"
+    translation_status: Optional[str] = "pending"
 
 
 class ArticleListResponse(BaseModel):
@@ -300,7 +300,11 @@ def get_articles(
                     WHEN at.status = 'completed' THEN at.translated_content
                     ELSE NULL
                 END AS translated_content,
-                COALESCE(at.status, 'untranslated') AS translation_status,
+                CASE
+                    WHEN at.status IS NOT NULL THEN at.status
+                    WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                    ELSE 'pending'
+                END AS translation_status,
                 COALESCE(aa.summary, a.summary) AS summary,
                 COALESCE(aa.major_category, a.major_category) AS major_category,
                 COALESCE(aa.sub_category, a.sub_category) AS sub_category,
@@ -321,7 +325,10 @@ def get_articles(
                 a.content AS content,
                 NULL AS translated_title,
                 NULL AS translated_content,
-                'untranslated' AS translation_status,
+                CASE
+                    WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                    ELSE 'pending'
+                END AS translation_status,
                 COALESCE(aa.summary, a.summary) AS summary,
                 COALESCE(aa.major_category, a.major_category) AS major_category,
                 COALESCE(aa.sub_category, a.sub_category) AS sub_category,
@@ -383,7 +390,11 @@ def get_article(article_id: int):
                         WHEN at.status = 'completed' THEN at.translated_content
                         ELSE NULL
                     END AS translated_content,
-                    COALESCE(at.status, 'untranslated') AS translation_status,
+                    CASE
+                    WHEN at.status IS NOT NULL THEN at.status
+                    WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                    ELSE 'pending'
+                END AS translation_status,
                     COALESCE(aa.summary, a.summary) AS summary,
                     COALESCE(aa.major_category, a.major_category) AS major_category,
                     COALESCE(aa.sub_category, a.sub_category) AS sub_category,
@@ -409,7 +420,10 @@ def get_article(article_id: int):
                     a.content AS content,
                     NULL AS translated_title,
                     NULL AS translated_content,
-                    'untranslated' AS translation_status,
+                    CASE
+                    WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                    ELSE 'pending'
+                END AS translation_status,
                     COALESCE(aa.summary, a.summary) AS summary,
                     COALESCE(aa.major_category, a.major_category) AS major_category,
                     COALESCE(aa.sub_category, a.sub_category) AS sub_category,
