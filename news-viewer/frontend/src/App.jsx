@@ -378,6 +378,7 @@ export default function App() {
   const [selectedSource, setSelectedSource] = useState("");
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
+  const [fetchRev, setFetchRev] = useState(0);
   const [metadataError, setMetadataError] = useState("");
   const [isCompact, setIsCompact] = useState(() => window.matchMedia(COMPACT_QUERY).matches);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -432,6 +433,11 @@ export default function App() {
     return nextReqId;
   };
 
+  const triggerFetch = () => {
+    startFetch();
+    setFetchRev((r) => r + 1);
+  };
+
   useEffect(() => {
     const controller = new AbortController();
     let currentReqId = reqIdRef.current;
@@ -466,7 +472,7 @@ export default function App() {
       });
 
     return () => controller.abort();
-  }, [page, selectedCategory, selectedSource, search]);
+  }, [page, selectedCategory, selectedSource, search, fetchRev]);
 
   const totalPages = Math.ceil(total / SIZE);
   const categoryItems = [
@@ -483,7 +489,7 @@ export default function App() {
 
   const handleCategoryClick = (cat) => {
     setFiltersOpen(false);
-    startFetch();
+    triggerFetch();
     setSelectedCategory(cat);
     setSelectedSource("");
     setPage(1);
@@ -491,14 +497,14 @@ export default function App() {
 
   const handleSourceClick = (src) => {
     setFiltersOpen(false);
-    startFetch();
+    triggerFetch();
     setSelectedSource(src);
     setSelectedCategory("");
     setPage(1);
   };
 
   const handleResetSearch = () => {
-    startFetch();
+    triggerFetch();
     setQuery("");
     setSearch("");
     setPage(1);
@@ -506,13 +512,13 @@ export default function App() {
 
   const handleSearchSubmit = (e) => {
     e?.preventDefault();
-    startFetch();
+    triggerFetch();
     setSearch(query);
     setPage(1);
   };
 
   const handlePageChange = (newPage) => {
-    startFetch();
+    triggerFetch();
     setPage(newPage);
   };
 
