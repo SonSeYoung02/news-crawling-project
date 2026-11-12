@@ -311,6 +311,28 @@ def get_translation_chunks(article_id: int, content_hash: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def update_translation_title(
+    article_id: int,
+    content_hash: str,
+    translated_title: str,
+) -> bool:
+    """번역된 제목을 중간 저장하여 프로세스 재개 시 제목 재호출을 방지한다."""
+    now_str = datetime.now().isoformat()
+    with _connect() as conn:
+        try:
+            conn.execute("""
+                UPDATE article_translations
+                SET translated_title = ?,
+                    updated_at = ?
+                WHERE article_id = ? AND content_hash = ?
+            """, (translated_title, now_str, article_id, content_hash))
+            conn.commit()
+            return conn.execute("SELECT changes()").fetchone()[0] > 0
+        except sqlite3.Error as e:
+            logger.error("번역 제목 중간 저장 실패 article_id=%s: %s", article_id, e)
+            return False
+
+
 def complete_article_translation(
     article_id: int,
     content_hash: str,
