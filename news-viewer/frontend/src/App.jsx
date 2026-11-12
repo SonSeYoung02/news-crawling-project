@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import ArticleBody from "./ArticleBody";
 
 const API = "/api";
 const COMPACT_QUERY = "(max-width: 1023px)";
@@ -25,13 +26,6 @@ async function fetchJSON(path, signal) {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
 }
-
-const cleanArticleText = (text = "") =>
-  text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.includes("\uad11\uace0"))
-    .join("\n");
 
 const s = {
   layout: {
@@ -302,13 +296,6 @@ const s = {
     fontSize: 14,
     lineHeight: 1.75,
     color: "#374151",
-  },
-  detailContent: {
-    fontSize: 15,
-    lineHeight: 1.85,
-    color: "#374151",
-    whiteSpace: "pre-wrap",
-    marginBottom: 28,
   },
   statusText: {
     textAlign: "center",
@@ -601,9 +588,7 @@ export default function App() {
                     <div style={s.summaryText}>{selected.summary}</div>
                   </div>
                 )}
-                <div style={s.detailContent}>
-                  {cleanArticleText(selected.content) || "이 기사는 원문 본문을 가져오지 못했습니다."}
-                </div>
+                <ArticleBody content={selected.content} />
                 {(selected.tags || []).length > 0 && (
                   <div style={s.tagRow}>
                     {(selected.tags || []).map((t) => (
