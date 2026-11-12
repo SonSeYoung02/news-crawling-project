@@ -6,9 +6,10 @@ const COMPACT_QUERY = "(max-width: 1023px)";
 const ACCENT = "#7c3aed";
 const ACCENT_LIGHT = "#ede9fe";
 const ACCENT_MID = "#8b5cf6";
+const ACCENT_DARK = "#5b21b6";
 const BORDER = "#e5e7eb";
-const TEXT_SECONDARY = "#6b7280";
-const TEXT_MUTED = "#9ca3af";
+const TEXT_SECONDARY = "#4b5563";
+const TEXT_MUTED = "#52525b";
 const SOURCE_FILTERS = [
   "네이버뉴스",
   "Google News",
@@ -94,7 +95,7 @@ const s = {
   }),
   filterCount: (active) => ({
     fontSize: 11,
-    color: active ? ACCENT_MID : TEXT_MUTED,
+    color: active ? ACCENT_DARK : TEXT_MUTED,
     fontWeight: 500,
   }),
   main: {
@@ -120,7 +121,6 @@ const s = {
     borderRadius: 10,
     border: `1.5px solid ${BORDER}`,
     fontSize: 16,
-    outline: "none",
     background: "#f9fafb",
     transition: "border-color 0.15s",
   },
