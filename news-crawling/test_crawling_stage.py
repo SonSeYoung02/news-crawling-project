@@ -4,33 +4,22 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
-temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-temp_db_path = temp_db.name
-temp_db.close()
-
-os.environ["DB_PATH"] = temp_db_path
-
 import db
 import main
 
 
 class TestCrawlingStage(unittest.TestCase):
     def setUp(self):
-        with sqlite3.connect(temp_db_path) as conn:
-            conn.execute("DROP TABLE IF EXISTS crawl_locks")
-            conn.execute("DROP TABLE IF EXISTS translation_quota")
-            conn.execute("DROP TABLE IF EXISTS translation_chunks")
-            conn.execute("DROP TABLE IF EXISTS article_translations")
-            conn.execute("DROP TABLE IF EXISTS article_analysis")
-            conn.execute("DROP TABLE IF EXISTS articles")
-            conn.commit()
+        self.temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.temp_db_path = self.temp_db.name
+        self.temp_db.close()
+        os.environ["DB_PATH"] = self.temp_db_path
         db.init_db()
 
-    @classmethod
-    def tearDownClass(cls):
+    def tearDown(self):
         try:
-            if os.path.exists(temp_db_path):
-                os.remove(temp_db_path)
+            if os.path.exists(self.temp_db_path):
+                os.remove(self.temp_db_path)
         except OSError:
             pass
 
@@ -63,7 +52,6 @@ class TestCrawlingStage(unittest.TestCase):
         self.assertEqual(failed, 0)
         self.assertEqual(len(new_ids), 2)
 
-        # DB 원문 저장 검증
         row_en = db.get_article_by_url("https://example.com/en-1")
         self.assertIsNotNone(row_en)
         self.assertEqual(row_en["title"], "Getting started with LLMs")
@@ -111,7 +99,6 @@ class TestCrawlingStage(unittest.TestCase):
             "published_at": "2026-11-12T00:00:00Z",
             "crawled_at": "2026-11-12T01:00:00",
         }]
-        # llm.analyzer 모듈이 import되거나 호출되지 않는지 검증
         with patch("llm.analyzer.summarize", create=True) as mock_sum, \
              patch("llm.analyzer.classify", create=True) as mock_cls:
             saved, refreshed, failed, new_ids = main.crawl_and_save_articles(sample)

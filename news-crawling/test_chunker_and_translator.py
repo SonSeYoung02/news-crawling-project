@@ -4,12 +4,6 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
-temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-temp_db_path = temp_db.name
-temp_db.close()
-
-os.environ["DB_PATH"] = temp_db_path
-
 import db
 from translation.chunker import chunk_text
 from translation.translator import translate_article_job
@@ -19,7 +13,10 @@ class DummyRateLimiter:
     def __init__(self, allow=True):
         self.allow = allow
 
-    def wait_and_consume(self, tokens=100):
+    def can_consume(self, requests=1):
+        return self.allow
+
+    def wait_and_consume(self, tokens=100, requests=1):
         return self.allow
 
 
@@ -27,27 +24,22 @@ class DummyCutoffController:
     def __init__(self, can_request=True):
         self._can_request = can_request
 
-    def can_request(self):
+    def can_request(self, now_dt=None):
         return self._can_request
 
 
 class TestChunkerAndTranslator(unittest.TestCase):
     def setUp(self):
-        with sqlite3.connect(temp_db_path) as conn:
-            conn.execute("DROP TABLE IF EXISTS crawl_locks")
-            conn.execute("DROP TABLE IF EXISTS translation_quota")
-            conn.execute("DROP TABLE IF EXISTS translation_chunks")
-            conn.execute("DROP TABLE IF EXISTS article_translations")
-            conn.execute("DROP TABLE IF EXISTS article_analysis")
-            conn.execute("DROP TABLE IF EXISTS articles")
-            conn.commit()
+        self.temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.temp_db_path = self.temp_db.name
+        self.temp_db.close()
+        os.environ["DB_PATH"] = self.temp_db_path
         db.init_db()
 
-    @classmethod
-    def tearDownClass(cls):
+    def tearDown(self):
         try:
-            if os.path.exists(temp_db_path):
-                os.remove(temp_db_path)
+            if os.path.exists(self.temp_db_path):
+                os.remove(self.temp_db_path)
         except OSError:
             pass
 
@@ -69,10 +61,8 @@ class TestChunkerAndTranslator(unittest.TestCase):
 
     @patch("translation.translator._call_gemini_api")
     def test_translate_article_job_with_resume(self, mock_gemini):
-        # mock_gemini: 번역 호출 시 한국어 prefix 붙여 반환
         mock_gemini.side_effect = lambda prompt, **kwargs: f"[번역] {prompt[:20]}"
 
-        # 1. 2개 문단 기사 생성
         p1 = "First chunk of content. " + ("X" * 60)
         p2 = "Second chunk of content. " + ("Y" * 60)
         content = f"{p1}\n\n{p2}"
@@ -98,14 +88,11 @@ class TestChunkerAndTranslator(unittest.TestCase):
             "source": "devto",
         }
 
-        # 2. 첫 번째 실행: 1번째 청크 번역 후 중단 시뮬레이션
-        # cutoff가 2번째 청크 전에서 False를 반환하도록 설정
         rate_limiter = DummyRateLimiter(allow=True)
         call_count = [0]
 
         class SteppedCutoff:
-            def can_request(self):
-                # 제목(1) + 첫번째 청크(2) 허용, 그 다음(3) 차단
+            def can_request(self, now_dt=None):
                 call_count[0] += 1
                 return call_count[0] <= 2
 
@@ -115,9 +102,8 @@ class TestChunkerAndTranslator(unittest.TestCase):
             cutoff_controller=SteppedCutoff(),
             max_chars=90,
         )
-        self.assertFalse(ok1)  # 중간에 중단되었으므로 False
+        self.assertFalse(ok1)
 
-        # DB 상태 검증: 번역 레코드는 pending, 청크는 1개만 completed
         trans_mid = db.get_or_create_translation(aid, content_hash)
         self.assertEqual(trans_mid["status"], "pending")
         chunks_mid = db.get_translation_chunks(aid, content_hash)
@@ -126,21 +112,17 @@ class TestChunkerAndTranslator(unittest.TestCase):
 
         calls_phase1 = mock_gemini.call_count
 
-        # 3. 두 번째 실행: 재개(Resume) - cutoff 완전 허용
         ok2 = translate_article_job(
             job=job,
             rate_limiter=DummyRateLimiter(allow=True),
             cutoff_controller=DummyCutoffController(can_request=True),
             max_chars=90,
         )
-        self.assertTrue(ok2)  # 전체 완료
+        self.assertTrue(ok2)
 
-        # 재개 시 이미 번역된 청크 1은 다시 호출되지 않아야 함!
-        # 호출 증가량은 2번째 청크 1회뿐이어야 함
         calls_phase2 = mock_gemini.call_count - calls_phase1
         self.assertEqual(calls_phase2, 1)
 
-        # 전체 완료 검증
         trans_final = db.get_or_create_translation(aid, content_hash)
         self.assertEqual(trans_final["status"], "completed")
         self.assertIsNotNone(trans_final["translated_title"])

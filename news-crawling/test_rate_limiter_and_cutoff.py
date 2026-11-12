@@ -4,12 +4,6 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 
-temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-temp_db_path = temp_db.name
-temp_db.close()
-
-os.environ["DB_PATH"] = temp_db_path
-
 import db
 from translation.rate_limiter import CutoffController, RateLimiter
 
@@ -18,21 +12,16 @@ KST = timezone(timedelta(hours=9))
 
 class TestRateLimiterAndCutoff(unittest.TestCase):
     def setUp(self):
-        with sqlite3.connect(temp_db_path) as conn:
-            conn.execute("DROP TABLE IF EXISTS crawl_locks")
-            conn.execute("DROP TABLE IF EXISTS translation_quota")
-            conn.execute("DROP TABLE IF EXISTS translation_chunks")
-            conn.execute("DROP TABLE IF EXISTS article_translations")
-            conn.execute("DROP TABLE IF EXISTS article_analysis")
-            conn.execute("DROP TABLE IF EXISTS articles")
-            conn.commit()
+        self.temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.temp_db_path = self.temp_db.name
+        self.temp_db.close()
+        os.environ["DB_PATH"] = self.temp_db_path
         db.init_db()
 
-    @classmethod
-    def tearDownClass(cls):
+    def tearDown(self):
         try:
-            if os.path.exists(temp_db_path):
-                os.remove(temp_db_path)
+            if os.path.exists(self.temp_db_path):
+                os.remove(self.temp_db_path)
         except OSError:
             pass
 

@@ -4,37 +4,21 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 
-# 테스트 전 임시 DB 설정
-temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-temp_db_path = temp_db.name
-temp_db.close()
-
-os.environ["DB_PATH"] = temp_db_path
-
 import db
 
 
 class TestTranslationDB(unittest.TestCase):
     def setUp(self):
-        # 각 테스트마다 깨끗한 DB로 초기화
-        with sqlite3.connect(temp_db_path) as conn:
-            conn.execute("DROP TABLE IF EXISTS crawl_locks")
-            conn.execute("DROP TABLE IF EXISTS translation_quota")
-            conn.execute("DROP TABLE IF EXISTS translation_chunks")
-            conn.execute("DROP TABLE IF EXISTS article_translations")
-            conn.execute("DROP TABLE IF EXISTS article_analysis")
-            conn.execute("DROP TABLE IF EXISTS articles")
-            conn.commit()
+        self.temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.temp_db_path = self.temp_db.name
+        self.temp_db.close()
+        os.environ["DB_PATH"] = self.temp_db_path
         db.init_db()
 
     def tearDown(self):
-        pass
-
-    @classmethod
-    def tearDownClass(cls):
         try:
-            if os.path.exists(temp_db_path):
-                os.remove(temp_db_path)
+            if os.path.exists(self.temp_db_path):
+                os.remove(self.temp_db_path)
         except OSError:
             pass
 
@@ -59,7 +43,6 @@ class TestTranslationDB(unittest.TestCase):
         self.assertEqual(len(h1), 64)
 
     def test_translation_lifecycle_and_chunks(self):
-        # 1. 기사 저장
         article = {
             "url": "https://example.com/ai-1",
             "source": "devto",
@@ -74,12 +57,10 @@ class TestTranslationDB(unittest.TestCase):
 
         content_hash = db.compute_content_hash(article["title"], article["content"])
 
-        # 2. 번역 생성/조회 (pending 상태)
         trans = db.get_or_create_translation(article_id, content_hash)
         self.assertEqual(trans["status"], "pending")
         self.assertEqual(trans["content_hash"], content_hash)
 
-        # 3. 본문 청크 저장 (1/2 번역 완료, 2/2 대기)
         db.save_translation_chunk(
             article_id=article_id,
             content_hash=content_hash,
@@ -106,7 +87,6 @@ class TestTranslationDB(unittest.TestCase):
         self.assertEqual(chunks[1]["status"], "pending")
         self.assertIsNone(chunks[1]["translated_chunk"])
 
-        # 4. 청크 2도 번역 완료
         db.save_translation_chunk(
             article_id=article_id,
             content_hash=content_hash,
@@ -119,7 +99,6 @@ class TestTranslationDB(unittest.TestCase):
         chunks = db.get_translation_chunks(article_id, content_hash)
         self.assertTrue(all(c["status"] == "completed" for c in chunks))
 
-        # 5. 전체 번역 완료 처리
         ok = db.complete_article_translation(
             article_id=article_id,
             content_hash=content_hash,
@@ -142,30 +121,23 @@ class TestTranslationDB(unittest.TestCase):
         self.assertEqual(q0["request_count"], 0)
         self.assertEqual(q0["token_count"], 0)
 
-        # 5회 요청, 1200 토큰 추가
         q1 = db.increment_daily_quota(date_str, requests=5, tokens=1200)
         self.assertEqual(q1["request_count"], 5)
         self.assertEqual(q1["token_count"], 1200)
 
-        # 3회 요청 추가
         q2 = db.increment_daily_quota(date_str, requests=3, tokens=800)
         self.assertEqual(q2["request_count"], 8)
         self.assertEqual(q2["token_count"], 2000)
 
-        # 재조회 시 일치
         q_check = db.get_daily_quota(date_str)
         self.assertEqual(q_check["request_count"], 8)
         self.assertEqual(q_check["token_count"], 2000)
 
     def test_crawl_lock_mutual_exclusion(self):
         lock_name = "test_nightly_crawl"
-        # 1. 락 획득 성공
         self.assertTrue(db.acquire_crawl_lock(name=lock_name, timeout_minutes=60))
-        # 2. 이미 획득된 락 재획득 시도 실패
         self.assertFalse(db.acquire_crawl_lock(name=lock_name, timeout_minutes=60))
-        # 3. 락 해제
         self.assertTrue(db.release_crawl_lock(name=lock_name))
-        # 4. 해제 후 다시 획득 성공
         self.assertTrue(db.acquire_crawl_lock(name=lock_name, timeout_minutes=60))
         db.release_crawl_lock(name=lock_name)
 
