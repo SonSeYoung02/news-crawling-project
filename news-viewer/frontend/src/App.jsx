@@ -332,12 +332,14 @@ const s = {
     display: "flex",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 8,
     padding: "8px 12px",
     marginBottom: 10,
     background: "#ffffff",
     borderRadius: 10,
     border: `1px solid ${BORDER}`,
+    maxWidth: "100%",
+    boxSizing: "border-box",
   },
   activeFilterLabel: {
     fontSize: 12,
@@ -349,12 +351,14 @@ const s = {
     display: "inline-flex",
     alignItems: "center",
     gap: 6,
-    padding: "4px 10px",
-    borderRadius: 16,
+    minHeight: 44,
+    padding: "8px 12px",
+    boxSizing: "border-box",
+    borderRadius: 22,
     background: ACCENT_LIGHT,
     color: ACCENT,
     border: "none",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: 500,
     cursor: "pointer",
     fontFamily: "inherit",
@@ -363,11 +367,16 @@ const s = {
     fontSize: 11,
     fontWeight: 700,
     lineHeight: 1,
-    color: ACCENT_MID,
+    color: "inherit",
   },
   filterResetBtn: {
-    padding: "4px 8px",
-    borderRadius: 6,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    padding: "8px 10px",
+    boxSizing: "border-box",
+    borderRadius: 8,
     background: "transparent",
     color: TEXT_SECONDARY,
     border: "none",
@@ -572,7 +581,7 @@ export default function App() {
                     type="button"
                     style={s.activeFilterChip}
                     onClick={() => handleCategoryClick("")}
-                    aria-label={`카테고리 ${selectedCategory} 필터 해제`}
+                    aria-label={`카테고리: ${selectedCategory} 필터 해제`}
                   >
                     <span>카테고리: {selectedCategory}</span>
                     <span style={s.activeFilterRemove} aria-hidden="true">✕</span>
@@ -583,7 +592,7 @@ export default function App() {
                     type="button"
                     style={s.activeFilterChip}
                     onClick={() => handleSourceClick("")}
-                    aria-label={`출처 ${selectedSource} 필터 해제`}
+                    aria-label={`출처: ${selectedSource} 필터 해제`}
                   >
                     <span>출처: {selectedSource}</span>
                     <span style={s.activeFilterRemove} aria-hidden="true">✕</span>
@@ -594,7 +603,7 @@ export default function App() {
                   style={s.filterResetBtn}
                   onClick={handleResetFilters}
                 >
-                  초기화
+                  필터 초기화
                 </button>
               </div>
             )}
