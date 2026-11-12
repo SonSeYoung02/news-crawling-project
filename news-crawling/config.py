@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "news.db"
+DB_PATH = Path(os.environ.get("DB_PATH", str(Path(__file__).parent / "news.db")))
 ENV_PATH = Path(__file__).parent / ".env"
 
 
@@ -19,12 +19,28 @@ def _load_env_file() -> None:
 _load_env_file()
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.5-flash"
+# gemini-2.5-flash는 무료 티어 후보 모델이며, 프로젝트의 실제 무료 가용성에 따라 설정으로 변경 가능합니다.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+REQUIRE_FREE_TIER = os.environ.get("REQUIRE_FREE_TIER", "true").lower() in ("true", "1", "yes")
+
+# 무료 API 한도 통제 설정
+# 무료 티어 기준: RPM(분당 요청 수), RPD(일일 요청 수)
+GEMINI_RPM_LIMIT = int(os.environ.get("GEMINI_RPM_LIMIT", "10"))
+GEMINI_DAILY_LIMIT = int(os.environ.get("GEMINI_DAILY_LIMIT", "1000"))
+REQUEST_INTERVAL_SECONDS = float(os.environ.get("REQUEST_INTERVAL_SECONDS", "6.0"))
+
+# 새벽 스케줄 및 마감 설정 (KST 기준)
+SCHEDULE_HOUR = int(os.environ.get("SCHEDULE_HOUR", "1"))
+SCHEDULE_MINUTE = int(os.environ.get("SCHEDULE_MINUTE", "0"))
+CUTOFF_HOUR = int(os.environ.get("CUTOFF_HOUR", "5"))
+CUTOFF_MINUTE = int(os.environ.get("CUTOFF_MINUTE", "55"))
+DEADLINE_HOUR = int(os.environ.get("DEADLINE_HOUR", "6"))
+DEADLINE_MINUTE = int(os.environ.get("DEADLINE_MINUTE", "0"))
+
+# 긴 기사 분할 크기 (문자 수 기준, 약 1,500 ~ 2,000자)
+CHUNK_MAX_CHARS = int(os.environ.get("CHUNK_MAX_CHARS", "2000"))
 
 MAJOR_CATEGORIES = ["AI", "IT", "경제", "국제"]
-
-SCHEDULE_HOUR = 8
-SCHEDULE_MINUTE = 0
 
 CRAWL_HEADERS = {
     "User-Agent": (
@@ -34,4 +50,4 @@ CRAWL_HEADERS = {
     )
 }
 
-REQUEST_TIMEOUT = 10
+REQUEST_TIMEOUT = 15
