@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 const API = "/api";
 const COMPACT_QUERY = "(max-width: 1023px)";
@@ -316,6 +316,44 @@ const s = {
     padding: "40px 0",
     fontSize: 14,
   },
+  emptyState: {
+    padding: "48px 16px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+  },
+  emptyIcon: {
+    fontSize: 32,
+    marginBottom: 12,
+    opacity: 0.6,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: 600,
+    color: "#1f2937",
+    marginBottom: 6,
+    letterSpacing: "-0.2px",
+  },
+  emptyDesc: {
+    fontSize: 13,
+    color: "#4b5563",
+    lineHeight: 1.5,
+    maxWidth: 260,
+    marginBottom: 18,
+  },
+  resetBtn: {
+    padding: "8px 16px",
+    borderRadius: 8,
+    border: `1.5px solid ${BORDER}`,
+    background: "#ffffff",
+    color: ACCENT,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    transition: "background 0.15s, border-color 0.15s",
+  },
   compactLayout: { flexDirection: "column" },
   compactSidebar: { width: "100%", flexShrink: 0, borderRight: "none", borderBottom: `1px solid ${BORDER}` },
   compactHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 16px", borderBottom: "none" },
@@ -376,8 +414,11 @@ export default function App() {
     return () => controller.abort();
   }, []);
 
+  const reqIdRef = useRef(0);
+
   useEffect(() => {
     const controller = new AbortController();
+    const currentReqId = ++reqIdRef.current;
     setLoading(true);
     setError("");
     setSelected(null);
@@ -387,25 +428,35 @@ export default function App() {
     if (search) params.set("q", search);
     fetchJSON(`/articles?${params}`, controller.signal)
       .then((data) => {
+        if (currentReqId !== reqIdRef.current || controller.signal.aborted) return;
         setArticles(data.articles);
         setTotal(data.total);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setArticles([]);
-          setTotal(0);
-          setError("기사를 불러오지 못했습니다. 서버 연결을 확인해 주세요.");
+        if (!isCompact && data.articles.length > 0) {
+          setSelected(data.articles[0]);
+        } else {
+          setSelected(null);
         }
       })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+      .catch(() => {
+        if (currentReqId !== reqIdRef.current || controller.signal.aborted) return;
+        setArticles([]);
+        setTotal(0);
+        setSelected(null);
+        setError("기사를 불러오지 못했습니다. 서버 연결을 확인해 주세요.");
+      })
+      .finally(() => {
+        if (currentReqId === reqIdRef.current && !controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
     return () => controller.abort();
-  }, [page, selectedCategory, selectedSource, search]);
+  }, [page, selectedCategory, selectedSource, search, isCompact]);
 
   useEffect(() => {
-    if (!isCompact && !loading && !selected && articles.length > 0) {
+    if (!isCompact && !loading && articles.length > 0 && !selected) {
       setSelected(articles[0]);
     }
-  }, [articles, loading, selected, isCompact]);
+  }, [isCompact, loading, articles, selected]);
 
   const totalPages = Math.ceil(total / SIZE);
   const categoryItems = [
@@ -432,6 +483,13 @@ export default function App() {
     setFiltersOpen(false);
     setSelectedSource(src);
     setSelectedCategory("");
+    setPage(1);
+    setSelected(null);
+  };
+
+  const handleResetSearch = () => {
+    setQuery("");
+    setSearch("");
     setPage(1);
     setSelected(null);
   };
@@ -511,7 +569,26 @@ export default function App() {
           <div aria-label="기사 목록" style={{ ...s.listPanel, ...(isCompact ? s.compactList : {}), ...(isCompact && selected ? { display: "none" } : {}) }}>
             {loading && <div style={s.statusText}>불러오는 중...</div>}
             {!loading && !error && articles.length === 0 && (
-              <div style={s.statusText}>기사가 없습니다</div>
+              search ? (
+                <div style={s.emptyState}>
+                  <div style={s.emptyIcon} aria-hidden="true">🔍</div>
+                  <div style={s.emptyTitle}>
+                    &lsquo;{search}&rsquo;에 대한 검색 결과가 없습니다
+                  </div>
+                  <div style={s.emptyDesc}>
+                    단어의 철자가 정확한지 확인하거나 다른 검색어로 검색해 보세요.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleResetSearch}
+                    style={{ ...s.resetBtn, ...s.touchButton }}
+                  >
+                    검색어 초기화
+                  </button>
+                </div>
+              ) : (
+                <div style={s.statusText}>기사가 없습니다</div>
+              )
             )}
             {!loading && articles.map((a) => (
               <button
@@ -567,7 +644,15 @@ export default function App() {
           <div aria-label="기사 상세" style={{ ...s.detailPanel, ...(isCompact ? s.compactDetail : {}), ...(isCompact && !selected ? { display: "none" } : {}) }}>
             {!selected ? (
               <div style={s.detailEmpty}>
-                <span style={{ fontSize: 14 }}>기사를 선택하세요</span>
+                <span style={{ fontSize: 14, color: TEXT_SECONDARY }}>
+                  {loading
+                    ? "기사를 불러오는 중..."
+                    : error
+                    ? "기사를 불러오지 못했습니다"
+                    : articles.length === 0
+                    ? (search ? "검색 결과가 없습니다" : "표시할 기사가 없습니다")
+                    : "기사를 선택하세요"}
+                </span>
               </div>
             ) : (
               <>
