@@ -1,9 +1,9 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background: #f8fafc;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
-  color: #111827;
+  background: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+  color: #16241a;
   line-height: 1.5;
 }
 
@@ -11,25 +11,25 @@ a { color: inherit; text-decoration: none; }
 
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+::-webkit-scrollbar-thumb { background: #cbd4cc; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #7a877c; }
 
 /* Placeholder styling: WCAG AA compliant contrast (>=4.5:1) on input background */
 input::placeholder,
 textarea::placeholder {
-  color: #52525b;
+  color: #525e55;
   opacity: 1;
 }
 
 /* Keyboard and input focus indicators */
 :focus-visible {
-  outline: 2px solid #7c3aed;
+  outline: 2px solid #258347;
   outline-offset: 2px;
 }
 
 input:focus,
 input:focus-visible {
-  outline: 2px solid #7c3aed;
+  outline: 2px solid #258347;
   outline-offset: 1px;
-  border-color: #7c3aed;
+  border-color: #258347;
 }
