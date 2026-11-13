@@ -16,6 +16,10 @@ from pydantic import BaseModel
 DEFAULT_DB_PATH = Path(__file__).parent.parent.parent / "news-crawling" / "news.db"
 DB_PATH = Path(os.environ.get("DB_PATH", str(DEFAULT_DB_PATH)))
 
+# 한국어 출처 목록 (번역이 불필요한 대상 판별에 사용)
+KOREAN_SOURCES = ("네이버뉴스", "GeekNews", "naver", "geeknews")
+_KOREAN_SOURCES_SQL = ", ".join(f"'{s}'" for s in KOREAN_SOURCES)
+
 app = FastAPI(
     title="News Viewer API",
     description="뉴스 크롤링 데이터를 조회하는 REST API. 기사 목록·상세·카테고리·출처·오늘의 AI 브리핑 엔드포인트를 제공합니다.",
@@ -287,7 +291,7 @@ def get_articles(
                     AND at.content_hash = compute_content_hash(a.title, a.content)
                 {where}
             """
-            select_fields = """
+            select_fields = f"""
                 a.id, a.url, a.source,
                 a.published_at, a.crawled_at,
                 a.title AS original_title,
@@ -312,7 +316,7 @@ def get_articles(
                 END AS translated_content,
                 CASE
                     WHEN at.status IS NOT NULL THEN at.status
-                    WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                    WHEN a.source IN ({_KOREAN_SOURCES_SQL}) THEN 'not_needed'
                     ELSE 'pending'
                 END AS translation_status,
                 COALESCE(aa.summary, a.summary) AS summary,
@@ -326,7 +330,7 @@ def get_articles(
                 LEFT JOIN article_analysis aa ON aa.article_id = a.id
                 {where}
             """
-            select_fields = """
+            select_fields = f"""
                 a.id, a.url, a.source,
                 a.published_at, a.crawled_at,
                 a.title AS original_title,
@@ -336,7 +340,7 @@ def get_articles(
                 NULL AS translated_title,
                 NULL AS translated_content,
                 CASE
-                    WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                    WHEN a.source IN ({_KOREAN_SOURCES_SQL}) THEN 'not_needed'
                     ELSE 'pending'
                 END AS translation_status,
                 COALESCE(aa.summary, a.summary) AS summary,
@@ -376,7 +380,7 @@ def get_article(article_id: int):
         has_trans = _has_translations_table(conn)
         if has_trans:
             row = conn.execute(
-                """
+                f"""
                 SELECT
                     a.id, a.url, a.source,
                     a.published_at, a.crawled_at,
@@ -402,7 +406,7 @@ def get_article(article_id: int):
                     END AS translated_content,
                     CASE
                         WHEN at.status IS NOT NULL THEN at.status
-                        WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                        WHEN a.source IN ({_KOREAN_SOURCES_SQL}) THEN 'not_needed'
                         ELSE 'pending'
                     END AS translation_status,
                     COALESCE(aa.summary, a.summary) AS summary,
@@ -420,7 +424,7 @@ def get_article(article_id: int):
             ).fetchone()
         else:
             row = conn.execute(
-                """
+                f"""
                 SELECT
                     a.id, a.url, a.source,
                     a.published_at, a.crawled_at,
@@ -431,7 +435,7 @@ def get_article(article_id: int):
                     NULL AS translated_title,
                     NULL AS translated_content,
                     CASE
-                        WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                        WHEN a.source IN ({_KOREAN_SOURCES_SQL}) THEN 'not_needed'
                         ELSE 'pending'
                     END AS translation_status,
                     COALESCE(aa.summary, a.summary) AS summary,
@@ -525,7 +529,7 @@ def get_briefing():
         has_trans = _has_translations_table(conn)
         if has_trans:
             rows = conn.execute(
-                """
+                f"""
                 SELECT
                     a.id, a.url, a.source,
                     a.published_at, a.crawled_at,
@@ -551,7 +555,7 @@ def get_briefing():
                     END AS translated_content,
                     CASE
                         WHEN at.status IS NOT NULL THEN at.status
-                        WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                        WHEN a.source IN ({_KOREAN_SOURCES_SQL}) THEN 'not_needed'
                         ELSE 'pending'
                     END AS translation_status,
                     a.summary AS summary,
@@ -568,7 +572,7 @@ def get_briefing():
             ).fetchall()
         else:
             rows = conn.execute(
-                """
+                f"""
                 SELECT
                     a.id, a.url, a.source,
                     a.published_at, a.crawled_at,
@@ -579,7 +583,7 @@ def get_briefing():
                     NULL AS translated_title,
                     NULL AS translated_content,
                     CASE
-                        WHEN a.source IN ('naver', 'geeknews') THEN 'not_needed'
+                        WHEN a.source IN ({_KOREAN_SOURCES_SQL}) THEN 'not_needed'
                         ELSE 'pending'
                     END AS translation_status,
                     a.summary AS summary,
