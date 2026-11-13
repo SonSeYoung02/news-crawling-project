@@ -7,6 +7,8 @@ from bs4 import BeautifulSoup
 
 from config import CRAWL_HEADERS, REQUEST_TIMEOUT
 
+from ._html_text import feed_content_to_text
+
 logger = logging.getLogger(__name__)
 
 _FEED_URLS = [
@@ -62,12 +64,7 @@ def _fetch_feed(client: httpx.Client, feed_url: str) -> list[dict[str, Any]]:
             or datetime.now().isoformat()
         )
 
-        raw_content = _extract_raw_content(entry)
-        cleaned_content = (
-            BeautifulSoup(raw_content, "html.parser").get_text("\n", strip=True)
-            if raw_content
-            else ""
-        )
+        cleaned_content = _extract_content_text(entry)
 
         if len(cleaned_content) < 30:
             content = f"{title}\n{cleaned_content}".strip()
@@ -138,16 +135,5 @@ def _extract_tag_text(entry: Any, tag_name: str) -> str:
     return tag.get_text(strip=True) if tag else ""
 
 
-def _extract_raw_content(entry: Any) -> str:
-    content_tag = entry.find("content")
-    if content_tag:
-        try:
-            contents = content_tag.decode_contents().strip()
-            if contents:
-                return contents
-        except Exception:
-            pass
-        text = content_tag.get_text(strip=True)
-        if text:
-            return text
-    return ""
+def _extract_content_text(entry: Any) -> str:
+    return feed_content_to_text(entry.find("content"))
