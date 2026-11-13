@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime
 
 import db
-from translation.queue import get_pending_translation_queue, is_translatable_source
+from translation.queue import get_pending_translation_queue, is_translatable_source, is_korean_text
 
 
 class TestTranslationQueue(unittest.TestCase):
@@ -119,6 +119,37 @@ class TestTranslationQueue(unittest.TestCase):
         queue = get_pending_translation_queue({naver_id})
         queued_ids = [job["article_id"] for job in queue]
         self.assertNotIn(naver_id, queued_ids)
+
+    def test_is_korean_text(self):
+        self.assertTrue(is_korean_text("삼성전자 실적 발표", "삼성전자가 3분기 실적을 발표했다."))
+        self.assertFalse(is_korean_text("OpenAI releases GPT", "OpenAI announced a new model today."))
+        self.assertFalse(is_korean_text("Seoul AI summit", "Leaders met in 서울 to discuss AI policy and safety."))
+        self.assertFalse(is_korean_text("", ""))
+
+    def test_queue_excludes_korean_content_from_english_source(self):
+        """영어 출처라도 본문이 한국어면 번역 대기열에서 제외된다."""
+        db.save_article({
+            "url": "https://example.com/gn-ko",
+            "source": "Google News",
+            "title": "삼성전자 실적 발표",
+            "content": "삼성전자가 3분기 실적을 발표했다.",
+            "published_at": "2026-11-12T00:50:00Z",
+            "crawled_at": "2026-11-12T01:00:00",
+        })
+        ko_id = db.get_article_id_by_url("https://example.com/gn-ko")
+        db.save_article({
+            "url": "https://example.com/gn-en",
+            "source": "Google News",
+            "title": "OpenAI releases GPT",
+            "content": "OpenAI announced a new model today.",
+            "published_at": "2026-11-12T00:55:00Z",
+            "crawled_at": "2026-11-12T01:00:00",
+        })
+        en_id = db.get_article_id_by_url("https://example.com/gn-en")
+        queue = get_pending_translation_queue(set())
+        queued_ids = [job["article_id"] for job in queue]
+        self.assertEqual(queued_ids, [en_id])
+        self.assertNotIn(ko_id, queued_ids)
 
 
 if __name__ == "__main__":
