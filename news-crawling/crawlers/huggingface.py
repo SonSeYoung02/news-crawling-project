@@ -7,6 +7,8 @@ from bs4 import BeautifulSoup
 
 from config import CRAWL_HEADERS, REQUEST_TIMEOUT
 
+from ._html_text import feed_content_to_text
+
 logger = logging.getLogger(__name__)
 
 _BLOG_FEED_URL = "https://huggingface.co/blog/feed.xml"
@@ -51,12 +53,7 @@ def _fetch_blog_feed() -> list[dict[str, Any]]:
             or datetime.now().isoformat()
         )
 
-        raw_content = _extract_raw_content(el)
-        cleaned_content = (
-            BeautifulSoup(raw_content, "html.parser").get_text("\n", strip=True)
-            if raw_content
-            else ""
-        )
+        cleaned_content = _extract_content_text(el)
         content = (cleaned_content or title)[:8000]
 
         articles.append({
@@ -132,17 +129,11 @@ def _extract_tag_text(element: Any, tag_name: str) -> str:
     return tag.get_text(strip=True) if tag else ""
 
 
-def _extract_raw_content(element: Any) -> str:
+def _extract_content_text(element: Any) -> str:
     for tag_name in ("description", "content", "summary"):
         tag = element.find(tag_name)
         if tag:
-            try:
-                contents = tag.decode_contents().strip()
-                if contents:
-                    return contents
-            except Exception:
-                pass
-            text = tag.get_text(strip=True)
+            text = feed_content_to_text(tag)
             if text:
                 return text
     return ""

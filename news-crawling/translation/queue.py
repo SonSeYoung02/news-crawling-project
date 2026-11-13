@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Optional
 
+from config import KOREAN_RATIO_THRESHOLD
 from db import _connect, compute_content_hash
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,15 @@ KOREAN_SOURCES = {"네이버뉴스", "geeknews", "naver"}
 def is_translatable_source(source: str) -> bool:
     """한국어 고유 소스(네이버뉴스, 긱뉴스 등)는 번역 대상에서 제외한다."""
     return (source or "").strip().lower() not in KOREAN_SOURCES
+
+
+def is_korean_text(title: str, content: str, threshold: float = KOREAN_RATIO_THRESHOLD) -> bool:
+    """제목 + 본문 앞 500자에서 공백 제외 글자 중 한글 비율이 threshold 이상이면 True."""
+    text = "".join(((title or "") + (content or "")[:500]).split())
+    if not text:
+        return False
+    korean = sum(1 for ch in text if "가" <= ch <= "힣")
+    return korean / len(text) >= threshold
 
 
 def _parse_timestamp(val: Optional[str]) -> float:
@@ -39,7 +49,7 @@ def _parse_timestamp(val: Optional[str]) -> float:
 
 def get_pending_translation_queue(new_article_ids: set[int]) -> list[dict]:
     """번역이 필요한 기사 대기열을 생성하고 우선순위에 따라 정렬하여 반환한다.
-    - 한국어 소스는 제외
+    - 한국어 소스 및 본문이 한국어인 기사는 제외
     - 현재 원문 해시와 일치하는 완료 번역이 이미 존재하면 제외
     - 우선순위 1: 당일 신규 수집된 기사 (new_article_ids 포함)
     - 우선순위 2: 이전 미완료 기사 및 원문 변경 기사
@@ -74,6 +84,11 @@ def get_pending_translation_queue(new_article_ids: set[int]) -> list[dict]:
 
         title = r["title"] or ""
         content = r["content"] or ""
+
+        # 1-2. 본문이 한국어이면 제외
+        if is_korean_text(title, content):
+            continue
+
         content_hash = compute_content_hash(title, content)
 
         # 2. 이미 현재 원문과 동일한 해시로 완료된 번역이 있으면 제외
