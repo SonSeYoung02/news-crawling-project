@@ -83,16 +83,6 @@ def _parse_row(row: Any) -> dict[str, Any] | None:
     lang_tag = row.select_one("[itemprop='programmingLanguage']")
     lang = lang_tag.get_text(strip=True) if lang_tag else ""
 
-    stars_tag = row.select_one("a[href*='/stargazers']")
-    total_stars = stars_tag.get_text(" ", strip=True) if stars_tag else ""
-
-    stars_today = ""
-    for span in row.find_all("span"):
-        text = span.get_text(" ", strip=True)
-        if "stars today" in text.lower() or "stars this week" in text.lower():
-            stars_today = text
-            break
-
     content_lines = [
         f"GitHub Repository: {repo_name}",
         f"URL: {url}",
@@ -101,10 +91,6 @@ def _parse_row(row: Any) -> dict[str, Any] | None:
         content_lines.append(f"Description: {description}")
     if lang:
         content_lines.append(f"Language: {lang}")
-    if total_stars:
-        content_lines.append(f"Total Stars: {total_stars}")
-    if stars_today:
-        content_lines.append(f"Recent Stars: {stars_today}")
 
     content = "\n".join(content_lines)
     if len(content) < 50:
