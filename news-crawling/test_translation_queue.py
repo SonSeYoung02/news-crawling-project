@@ -24,8 +24,11 @@ class TestTranslationQueue(unittest.TestCase):
             pass
 
     def test_is_translatable_source(self):
+        self.assertFalse(is_translatable_source("네이버뉴스"))
+        self.assertFalse(is_translatable_source("GeekNews"))
         self.assertFalse(is_translatable_source("naver"))
         self.assertFalse(is_translatable_source("geeknews"))
+        self.assertTrue(is_translatable_source("Google News"))
         self.assertTrue(is_translatable_source("devto"))
         self.assertTrue(is_translatable_source("google_news"))
         self.assertTrue(is_translatable_source("reddit_ai"))
@@ -46,8 +49,8 @@ class TestTranslationQueue(unittest.TestCase):
 
         db.save_article({
             "url": "https://example.com/ko",
-            "source": "geeknews",
-            "title": "긱뉴스 한국어 기사",
+            "source": "네이버뉴스",
+            "title": "네이버 한국어 기사",
             "content": "한국어 내용",
             "published_at": "2026-11-12T00:40:00+09:00",
             "crawled_at": "2026-11-12T01:00:00",
@@ -101,6 +104,21 @@ class TestTranslationQueue(unittest.TestCase):
         self.assertTrue(queue[0]["is_new_in_run"])
         self.assertTrue(queue[1]["is_new_in_run"])
         self.assertFalse(queue[2]["is_new_in_run"])
+
+    def test_queue_excludes_naver_articles(self):
+        """네이버뉴스 출처 기사는 번역 대기열에 포함되지 않아야 한다."""
+        db.save_article({
+            "url": "https://example.com/naver-1",
+            "source": "네이버뉴스",
+            "title": "네이버 IT 신규 기사",
+            "content": "네이버 IT 뉴스 본문 내용입니다.",
+            "published_at": "2026-11-12T00:50:00+09:00",
+            "crawled_at": "2026-11-12T01:00:00",
+        })
+        naver_id = db.get_article_id_by_url("https://example.com/naver-1")
+        queue = get_pending_translation_queue({naver_id})
+        queued_ids = [job["article_id"] for job in queue]
+        self.assertNotIn(naver_id, queued_ids)
 
 
 if __name__ == "__main__":

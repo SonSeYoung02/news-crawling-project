@@ -70,10 +70,10 @@ def setup_db(db_path: str):
             VALUES (1, ?, '딥러닝의 대도약', '트랜스포머가 인공신경망 분야를 혁신하고 있습니다.', 'completed', '2026-11-12T01:00:00', '2026-11-12T01:05:00')
         """, (h1,))
 
-        # 기사 2: 한국어 기사 (네이버)
+        # 기사 2: 한국어 기사 (네이버뉴스)
         conn.execute("""
             INSERT INTO articles (id, url, source, title, content, published_at, crawled_at, major_category, tags)
-            VALUES (2, 'https://naver.com/semi', 'naver', '차세대 반도체 공정 발표', '극자외선 노광 장비 도입이 가속화된다.',
+            VALUES (2, 'https://naver.com/semi', '네이버뉴스', '차세대 반도체 공정 발표', '극자외선 노광 장비 도입이 가속화된다.',
                     '2026-11-12T00:30:00+09:00', '2026-11-12T01:00:00', 'IT', '["반도체"]')
         """)
 
@@ -134,7 +134,7 @@ class TestSearchAndFilters(unittest.TestCase):
         resp = self.client.get("/articles?category=IT")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["total"], 1)
-        self.assertEqual(resp.json()["articles"][0]["source"], "naver")
+        self.assertEqual(resp.json()["articles"][0]["source"], "네이버뉴스")
 
         resp_src = self.client.get("/articles?source=google_news")
         self.assertEqual(resp_src.status_code, 200)
@@ -156,7 +156,7 @@ class TestSearchAndFilters(unittest.TestCase):
         data = resp.json()
         sources = {s["source"]: s["count"] for s in data}
         self.assertEqual(sources.get("devto"), 1)
-        self.assertEqual(sources.get("naver"), 1)
+        self.assertEqual(sources.get("네이버뉴스"), 1)
         self.assertEqual(sources.get("google_news"), 1)
 
 

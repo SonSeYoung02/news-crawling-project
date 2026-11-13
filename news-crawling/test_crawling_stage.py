@@ -37,7 +37,7 @@ class TestCrawlingStage(unittest.TestCase):
             },
             {
                 "url": "https://example.com/ko-1",
-                "source": "naver",
+                "source": "네이버뉴스",
                 "title": "인공지능 생태계 확장",
                 "content": "국내 AI 생태계가 빠르게 확장 중이다.",
                 "published_at": "2026-11-12T00:30:00+09:00",

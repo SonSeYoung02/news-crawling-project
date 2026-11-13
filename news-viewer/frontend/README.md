@@ -1,6 +1,6 @@
 # 뉴스 뷰어 — Frontend
 
-크롤링된 한국 신문 기사를 브라우저에서 탐색하는 React SPA입니다.  
+크롤링된 국내외 IT·AI 뉴스(영문 기사는 한국어 번역문 우선)를 브라우저에서 탐색하는 React SPA입니다.  
 FastAPI 백엔드(`news-viewer/backend`)가 제공하는 REST API를 소비합니다.
 
 ## 시작하기
@@ -24,10 +24,21 @@ uvicorn main:app --reload
 
 - **카테고리 필터** — API가 반환하는 카테고리와 건수 표시
 - **출처 필터** — 네이버뉴스 / Google News / GeekNews / Reddit AI / GitHub Trending / Hugging Face / arXiv / dev.to
-- **키워드 검색** — 제목 및 본문 대상 (Enter 또는 검색 버튼)
+- **키워드 검색** — 원문·번역 제목, 본문, 요약 대상 (Enter 또는 검색 버튼, `<form onSubmit>` 단일 처리)
 - **기사 상세 보기** — 한국어 번역문/원문 본문(Markdown 서식 지원), LLM 요약(있는 경우), 태그, 원문 링크
 - **페이지네이션** — 페이지당 20건
 - **반응형 화면** — 1,024px 이상은 3단 구성, 작은 화면은 접이식 필터와 기사 목록·상세 전환
+
+## 화면 디자인
+
+밝은 중립 배경의 읽기 중심 뉴스 리더 UI입니다(#22).
+
+- **색상**: 강조색은 녹색 계열(`ACCENT` `#258347`, `ACCENT_DARK` `#1e6837`, `ACCENT_LIGHT` `#edf5ef`)이며 `App.jsx` 상단 상수에서 관리합니다. 본문·보조 텍스트는 WCAG AA(4.5:1) 이상의 대비를 유지합니다.
+- **출처 배지**: 출처별 약어와 색상(`SOURCE_MARKS`)으로 목록과 상세 화면에서 출처를 구분합니다. 새 출처를 추가하면 `SOURCE_FILTERS`와 `SOURCE_MARKS`를 함께 갱신합니다.
+- **정보 위계**: 출처·카테고리·날짜 → 제목 → 요약 → 태그 순으로 배치하고, 카드 테두리·그림자 대신 구분선과 선택 강조로 목록을 구분합니다.
+- **사이드바**: 보기·카테고리·출처 항목에 기사 수 배지를 표시합니다.
+- **키보드 접근성**: `index.css`의 `:focus-visible`로 녹색 포커스 링을 표시합니다.
+- 변경 전후 스크린샷은 `review/issue-22/`에 있습니다.
 
 ## 휴대폰에서 접속하기
 
@@ -65,8 +76,13 @@ frontend/
 ├── vite.config.js      # Vite + React 플러그인 설정
 ├── src/
 │   ├── main.jsx        # ReactDOM.createRoot 부트스트랩
-│   ├── App.jsx         # 전체 앱 (상태, 데이터 패칭, UI)
-│   └── index.css       # 전역 리셋 및 스크롤바 스타일
+│   ├── App.jsx         # 전체 앱 (상태, 데이터 패칭, UI, 색상 상수)
+│   ├── ArticleBody.jsx # 기사 본문 Markdown 렌더링
+│   ├── articleState.js # 기사 목록·상세 요청 상태 리듀서
+│   └── index.css       # 전역 리셋, 스크롤바, 포커스 링 스타일
+├── test/
+│   └── article-body.test.mjs  # 본문 렌더링 회귀 테스트 (npm test)
+├── review/             # 이슈별 변경 전후 스크린샷
 └── public/
     └── favicon.svg
 ```
