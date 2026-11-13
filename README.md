@@ -28,6 +28,9 @@
 - **한국어 우선 웹 뷰어 및 하위 호환성**:
   - 백엔드 API는 번역이 완료된 기사의 경우 한국어 번역문을 기본 `title`, `content`로 우선 제공하고, 미번역 기사는 원문으로 안전하게 폴백합니다.
   - 제목·본문·원문 검색 지원 및 기존 카테고리/태그/요약과의 100% 호환성을 보장합니다.
+  - 한국어 출처(`네이버뉴스`, `GeekNews`) 기사는 번역 대상에서 제외되며, API는 `translation_status`를 `not_needed`로 반환합니다.
+- **오늘의 AI 브리핑**: 첫 화면에서 최근 24시간의 AI 기사 최대 5개를 주제·출처 다양성과 최신순 기준으로 골라 보여줍니다(`GET /briefing`).
+- **밝은 뉴스 리더 UI**: 밝은 중립 배경과 녹색 강조(`#258347`), 출처별 배지, 출처·날짜·제목·요약 위계를 갖춘 읽기 중심 화면입니다. PC는 3단 구성, 1,023px 이하에서는 접이식 필터와 목록·상세 전환을 제공하며 키보드 포커스를 표시합니다.
 
 ---
 
@@ -170,5 +173,10 @@ news-crawling-project/
 - **`GET /articles` & `GET /articles/{id}`**:
   - `title`, `content`: 번역 완료(`status == 'completed'`) 시 한국어 번역문 우선 반환, 미완료 시 원문 반환.
   - `original_title`, `original_content`, `translated_title`, `translated_content`, `translation_status` 필드 추가 제공.
+  - `translation_status`: 번역 레코드가 있으면 그 상태(`pending`|`in_progress`|`completed`|`failed`), 없으면 한국어 출처(`네이버뉴스`, `GeekNews`, 레거시 `naver`, `geeknews`)는 `not_needed`, 그 외는 `pending`.
   - `summary`, `major_category`, `sub_category`, `tags`: 기존 분석 데이터 호환 제공.
   - 검색 파라미터 `q`: 원문 제목, 번역 제목, 원문 본문, 번역 본문, 요약 동시 검색.
+- **`GET /briefing`**:
+  - 최근 24시간(발행시각, 없으면 수집시각 기준) 동안의 `major_category = 'AI'` 기사 중 최대 5개를 반환합니다.
+  - 주제(`sub_category`)·출처 다양성을 우선하고 최신순으로 선정하며, 기사 필드는 `/articles`와 같은 번역 우선 규칙을 따릅니다.
+  - 응답: `generated_at`, `window_start`, `window_end`, `selection_method`, `articles`.
