@@ -113,6 +113,8 @@ class BriefingTests(unittest.TestCase):
             ''')
         self.add(10, published='2026-11-10T02:00:00Z', category='AI', source='techcrunch', topic='LLM')
         self.add(11, published='2026-11-10T02:00:00Z', category='AI', source='huggingface', topic='Vision')
+        self.add(12, published='2026-11-10T02:00:00Z', category='AI', source='네이버뉴스', topic='NLP')
+        self.add(13, published='2026-11-10T02:00:00Z', category='AI', source='GeekNews', topic='Dev')
         h = main.compute_content_hash('기사 10', '본문')
         with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('''
@@ -123,6 +125,8 @@ class BriefingTests(unittest.TestCase):
         articles_map = {a['id']: a for a in res['articles']}
         self.assertIn(10, articles_map)
         self.assertIn(11, articles_map)
+        self.assertIn(12, articles_map)
+        self.assertIn(13, articles_map)
 
         art10 = articles_map[10]
         self.assertEqual(art10['title'], '번역된 기사 10')
@@ -141,6 +145,28 @@ class BriefingTests(unittest.TestCase):
         self.assertIsNone(art11['translated_title'])
         self.assertIsNone(art11['translated_content'])
         self.assertEqual(art11['translation_status'], 'pending')
+
+        art12 = articles_map[12]
+        self.assertEqual(art12['source'], '네이버뉴스')
+        self.assertEqual(art12['translation_status'], 'not_needed')
+
+        art13 = articles_map[13]
+        self.assertEqual(art13['source'], 'GeekNews')
+        self.assertEqual(art13['translation_status'], 'not_needed')
+
+    def test_briefing_korean_sources_without_translation_table(self):
+        # article_translations 테이블이 없는 경우
+        self.add(20, published='2026-11-10T02:00:00Z', category='AI', source='네이버뉴스', topic='NLP')
+        self.add(21, published='2026-11-10T02:00:00Z', category='AI', source='GeekNews', topic='Dev')
+        self.add(22, published='2026-11-10T02:00:00Z', category='AI', source='huggingface', topic='Vision')
+        res = self.result()
+        articles_map = {a['id']: a for a in res['articles']}
+        self.assertIn(20, articles_map)
+        self.assertIn(21, articles_map)
+        self.assertIn(22, articles_map)
+        self.assertEqual(articles_map[20]['translation_status'], 'not_needed')
+        self.assertEqual(articles_map[21]['translation_status'], 'not_needed')
+        self.assertEqual(articles_map[22]['translation_status'], 'pending')
 
 
 if __name__ == '__main__':
