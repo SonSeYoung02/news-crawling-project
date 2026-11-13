@@ -38,7 +38,7 @@ uvicorn main:app --reload
 - **정보 위계**: 출처·카테고리·날짜 → 제목 → 요약 → 태그 순으로 배치하고, 카드 테두리·그림자 대신 구분선과 선택 강조로 목록을 구분합니다.
 - **사이드바**: 보기·카테고리·출처 항목에 기사 수 배지를 표시합니다.
 - **키보드 접근성**: `index.css`의 `:focus-visible`로 녹색 포커스 링을 표시합니다.
-- 변경 전후 스크린샷은 `review/issue-22/`에 있습니다.
+- 현재 화면 스크린샷은 `review/issue-22/`에 있습니다.
 
 ## 휴대폰에서 접속하기
 
@@ -82,7 +82,7 @@ frontend/
 │   └── index.css       # 전역 리셋, 스크롤바, 포커스 링 스타일
 ├── test/
 │   └── article-body.test.mjs  # 본문 렌더링 회귀 테스트 (npm test)
-├── review/             # 이슈별 변경 전후 스크린샷
+├── review/issue-22/    # 현재 화면 스크린샷 (루트 README에서 사용)
 └── public/
     └── favicon.svg
 ```
