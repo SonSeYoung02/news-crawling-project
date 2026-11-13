@@ -978,15 +978,11 @@ export default function App() {
               aria-label="기사 검색"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSearchSubmit(e);
-              }}
               placeholder="기사 제목, 본문으로 검색..."
               style={s.searchInput}
             />
             <button
               type="submit"
-              onClick={handleSearchSubmit}
               style={{ ...s.searchBtn, ...s.touchButton }}
             >
               검색
