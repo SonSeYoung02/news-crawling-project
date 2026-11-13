@@ -70,17 +70,18 @@ def run_pipeline(
     cutoff_controller: Optional[object] = None,
     rate_limiter: Optional[object] = None,
 ) -> dict:
-    """새벽 뉴스 수집 및 Gemini 순차 번역 파이프라인.
+    """새벽 뉴스 수집 및 Gemini 묶음 번역 파이프라인.
     1. 프로세스 락 획득 (중복 실행 방지)
     2. 뉴스 수집 및 원문 즉시 저장 (요약/분류 배제)
     3. 번역 대기열 생성 (신규 기사 최우선, 한국어 소스 배제)
-    4. 순차 번역 수행 (05:55 마감 및 무료 한도 제어, 긴 본문 청크 및 재개)
+    4. 묶음 번역 수행 (여러 기사를 Gemini 1회 요청으로 번역, 05:55 마감·일일 20회 한도 제어)
     5. 프로세스 락 해제
     """
     from db import acquire_crawl_lock, init_db, release_crawl_lock
     from translation.queue import get_pending_translation_queue
     from translation.rate_limiter import CutoffController, RateLimiter
-    from translation.translator import translate_article_job
+    from translation.batch_translator import translate_batch
+    from translation.batcher import build_batches
 
     logger.info("=== 새벽 뉴스 수집·번역 파이프라인 시작: %s ===", datetime.now().isoformat())
 
@@ -97,7 +98,7 @@ def run_pipeline(
 
     status = "completed"
     saved = refreshed = failed_crawl = 0
-    translated_count = failed_translation_count = 0
+    translated_count = failed_translation_count = pending_translation_count = 0
 
     try:
         # 1. 수집 및 원문 즉시 저장
@@ -106,34 +107,37 @@ def run_pipeline(
         # 2. 번역 대기열 생성
         queue = get_pending_translation_queue(new_ids)
 
-        # 3. 순차 번역 루프
-        for idx, job in enumerate(queue):
+        # 3. 묶음 번역 루프 (Gemini 1회 요청에 여러 기사)
+        batches = build_batches(queue)
+        permanent_streak = 0
+        for idx, batch in enumerate(batches):
             # 05:55 마감 검사
             if not cutoff_controller.can_request():
                 logger.info("새벽 마감 시간(05:55)에 도달하여 신규 번역 작업을 안전하게 중단합니다.")
                 status = "stopped_cutoff"
+                pending_translation_count += sum(len(b) for b in batches[idx:])
                 break
 
-            # 일일 한도 검사
-            if not rate_limiter.can_consume():
+            logger.info("묶음 번역 [%d/%d] %d건", idx + 1, len(batches), len(batch))
+            outcome = translate_batch(batch, rate_limiter)
+            translated_count += len(outcome.completed_ids)
+            failed_translation_count += len(outcome.failed_ids)
+            pending_translation_count += len(outcome.pending_ids)
+
+            if outcome.stop_reason == "daily_quota":
                 logger.warning("일일 무료 API 한도에 도달하여 번역 작업을 중단합니다.")
                 status = "stopped_daily_quota"
+                pending_translation_count += sum(len(b) for b in batches[idx + 1:])
                 break
-
-            logger.info("기사 번역 진행 [%d/%d] ID: %d (%s) - %s",
-                        idx + 1, len(queue), job["article_id"],
-                        "신규" if job["is_new_in_run"] else "이전미번역",
-                        _safe_log_text(job["title"][:30]))
-
-            ok = translate_article_job(
-                job=job,
-                rate_limiter=rate_limiter,
-                cutoff_controller=cutoff_controller,
-            )
-            if ok:
-                translated_count += 1
+            if outcome.stop_reason == "permanent_error":
+                permanent_streak += 1
+                if permanent_streak >= 2:
+                    logger.error("영구 오류가 연속 2회 발생하여 번역 작업을 중단합니다.")
+                    status = "stopped_permanent_error"
+                    pending_translation_count += sum(len(b) for b in batches[idx + 1:])
+                    break
             else:
-                failed_translation_count += 1
+                permanent_streak = 0
 
     except Exception as e:
         logger.error("파이프라인 실행 중 예외 발생: %s", e, exc_info=True)
@@ -142,9 +146,9 @@ def run_pipeline(
         release_crawl_lock("nightly_crawl")
 
     logger.info(
-        "=== 파이프라인 종료 | 수집: %d (신규 %d, 갱신 %d, 실패 %d) | 번역 완료: %d | 미완료/실패: %d | 최종 상태: %s ===",
+        "=== 파이프라인 종료 | 수집: %d (신규 %d, 갱신 %d, 실패 %d) | 번역 완료: %d | 실패: %d | 미완료: %d | 최종 상태: %s ===",
         saved + refreshed, saved, refreshed, failed_crawl,
-        translated_count, failed_translation_count, status,
+        translated_count, failed_translation_count, pending_translation_count, status,
     )
     return {
         "status": status,
@@ -153,6 +157,7 @@ def run_pipeline(
         "failed_crawl": failed_crawl,
         "translated": translated_count,
         "failed_translation": failed_translation_count,
+        "pending_translation": pending_translation_count,
     }
 
 
@@ -188,7 +193,7 @@ def main() -> None:
     from config import SCHEDULE_HOUR, SCHEDULE_MINUTE
 
     parser = argparse.ArgumentParser(
-        description="새벽 뉴스 수집 및 Gemini 순차 번역 파이프라인"
+        description="새벽 뉴스 수집 및 Gemini 묶음 번역 파이프라인"
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--run", action="store_true", help="파이프라인 1회 즉시 실행")
