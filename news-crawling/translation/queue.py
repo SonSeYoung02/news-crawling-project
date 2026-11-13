@@ -7,11 +7,11 @@ from db import _connect, compute_content_hash
 
 logger = logging.getLogger(__name__)
 
-KOREAN_SOURCES = {"naver", "geeknews"}
+KOREAN_SOURCES = {"네이버뉴스", "geeknews", "naver"}
 
 
 def is_translatable_source(source: str) -> bool:
-    """한국어 고유 소스(네이버 뉴스, 긱뉴스 등)는 번역 대상에서 제외한다."""
+    """한국어 고유 소스(네이버뉴스, 긱뉴스 등)는 번역 대상에서 제외한다."""
     return (source or "").strip().lower() not in KOREAN_SOURCES
 
 

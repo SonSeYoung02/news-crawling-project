@@ -41,7 +41,7 @@ class TestPipelineIntegration(unittest.TestCase):
             },
             {
                 "url": "https://example.com/int-ko",
-                "source": "naver",
+                "source": "네이버뉴스",
                 "title": "국내 반도체 생산 확대",
                 "content": "국내 주요 기업들이 투자를 확대한다.",
                 "published_at": "2026-11-12T00:10:00+09:00",
