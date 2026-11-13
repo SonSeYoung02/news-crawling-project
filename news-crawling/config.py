@@ -28,6 +28,8 @@ REQUIRE_FREE_TIER = os.environ.get("REQUIRE_FREE_TIER", "true").lower() in ("tru
 GEMINI_RPM_LIMIT = int(os.environ.get("GEMINI_RPM_LIMIT", "10"))
 # gemini-2.5-flash 무료 RPD는 20 (2026-11 로그 기준)
 GEMINI_DAILY_LIMIT = int(os.environ.get("GEMINI_DAILY_LIMIT", "20"))
+# Gemini HTTP 요청 타임아웃(밀리초)
+GEMINI_TIMEOUT_MS = int(os.environ.get("GEMINI_TIMEOUT_MS", "180000"))
 # 묶음 번역: 요청 1회에 담을 최대 글자 수/기사 수
 BATCH_MAX_CHARS = int(os.environ.get("BATCH_MAX_CHARS", "12000"))
 BATCH_MAX_ARTICLES = int(os.environ.get("BATCH_MAX_ARTICLES", "10"))

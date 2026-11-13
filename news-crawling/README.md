@@ -1,6 +1,6 @@
-# AI·IT 뉴스 크롤링 + Gemini 순차 번역 파이프라인
+# AI·IT 뉴스 크롤링 + Gemini 묶음 번역 파이프라인
 
-네이버뉴스, Google News, GeekNews, Reddit AI, GitHub Trending, Hugging Face, arXiv, dev.to에서 최신 뉴스를 수집하여 원문 그대로 SQLite에 우선 저장하고, 매일 새벽 시간대(01:00~06:00 KST)에 Google Gemini API 무료 티어를 통해 영문 기사의 제목과 본문을 한국어로 순차 번역하는 파이프라인입니다.
+네이버뉴스, Google News, GeekNews, Reddit AI, GitHub Trending, Hugging Face, arXiv, dev.to에서 최신 뉴스를 수집하여 원문 그대로 SQLite에 우선 저장하고, 매일 새벽 시간대(01:00~06:00 KST)에 Google Gemini API 무료 티어를 통해 영문 기사의 제목과 본문을 한국어로 묶음 번역하는 파이프라인입니다.
 
 ---
 
@@ -82,7 +82,12 @@ REQUIRE_FREE_TIER=true
 
 # 무료 한도 통제 설정
 GEMINI_RPM_LIMIT=10
-GEMINI_DAILY_LIMIT=1000
+GEMINI_DAILY_LIMIT=20
+GEMINI_TIMEOUT_MS=180000      # Gemini 요청 타임아웃(밀리초)
+BATCH_MAX_CHARS=12000         # 묶음 1회 요청의 최대 글자 수
+BATCH_MAX_ARTICLES=10         # 묶음 1회 요청의 최대 기사 수
+KOREAN_RATIO_THRESHOLD=0.3    # 한글 비율이 이 값 이상이면 한국어 기사로 판단
+MIN_TRANSLATION_RATIO=0.3     # 번역문/원문 길이 비율 하한(미만이면 실패 처리)
 REQUEST_INTERVAL_SECONDS=6.0
 
 # 새벽 스케줄 및 마감 시간 설정 (KST 기준)
@@ -101,7 +106,7 @@ DEADLINE_MINUTE=0
 ## 사용법
 
 ```bash
-# 1회 즉시 실행 (수집 및 순차 번역)
+# 1회 즉시 실행 (수집 및 묶음 번역)
 python main.py --run
 
 # 새벽 01:00 KST 자동 스케줄러 실행

@@ -13,6 +13,9 @@ class TestGeminiClientConfig(unittest.TestCase):
             tr.get_gemini_client()
         kwargs = mock_client.call_args.kwargs
         self.assertEqual(kwargs["http_options"]["api_version"], "v1beta")
+        import config
+        self.assertEqual(kwargs["http_options"]["timeout"], config.GEMINI_TIMEOUT_MS)
+        self.assertEqual(config.GEMINI_TIMEOUT_MS, 180000)
         tr._gemini_client = None
 
     def test_default_daily_limit_is_20(self):
