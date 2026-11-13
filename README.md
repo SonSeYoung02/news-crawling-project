@@ -13,6 +13,8 @@
 - [5. 수집 뉴스 소스 및 새벽 번역 파이프라인 명세](#5-수집-뉴스-소스-및-새벽-번역-파이프라인-명세)
 - [6. 데이터베이스 스키마 및 API 계약](#6-데이터베이스-스키마-및-api-계약)
 - [7. 시작하기 (설치 및 실행 방법)](#7-시작하기-설치-및-실행-방법)
+- [8. 최근 변경 이력](#8-최근-변경-이력)
+- [9. 알려진 문제 및 향후 과제](#9-알려진-문제-및-향후-과제)
 
 ---
 
@@ -28,6 +30,9 @@
 - **한국어 우선 웹 뷰어 및 하위 호환성**:
   - 백엔드 API는 번역이 완료된 기사의 경우 한국어 번역문을 기본 `title`, `content`로 우선 제공하고, 미번역 기사는 원문으로 안전하게 폴백합니다.
   - 제목·본문·원문 검색 지원 및 기존 카테고리/태그/요약과의 100% 호환성을 보장합니다.
+  - 한국어 출처(`네이버뉴스`, `GeekNews`) 기사는 번역 대상에서 제외되며, API는 `translation_status`를 `not_needed`로 반환합니다.
+- **오늘의 AI 브리핑**: 첫 화면에서 최근 24시간의 AI 기사 최대 5개를 주제·출처 다양성과 최신순 기준으로 골라 보여줍니다(`GET /briefing`).
+- **밝은 뉴스 리더 UI**: 밝은 중립 배경과 녹색 강조(`#258347`), 출처별 배지, 출처·날짜·제목·요약 위계를 갖춘 읽기 중심 화면입니다. PC는 3단 구성, 1,023px 이하에서는 접이식 필터와 목록·상세 전환을 제공하며 키보드 포커스를 표시합니다.
 
 ---
 
@@ -170,5 +175,83 @@ news-crawling-project/
 - **`GET /articles` & `GET /articles/{id}`**:
   - `title`, `content`: 번역 완료(`status == 'completed'`) 시 한국어 번역문 우선 반환, 미완료 시 원문 반환.
   - `original_title`, `original_content`, `translated_title`, `translated_content`, `translation_status` 필드 추가 제공.
+  - `translation_status`: 번역 레코드가 있으면 그 상태(`pending`|`in_progress`|`completed`|`failed`), 없으면 한국어 출처(`네이버뉴스`, `GeekNews`, 레거시 `naver`, `geeknews`)는 `not_needed`, 그 외는 `pending`.
   - `summary`, `major_category`, `sub_category`, `tags`: 기존 분석 데이터 호환 제공.
   - 검색 파라미터 `q`: 원문 제목, 번역 제목, 원문 본문, 번역 본문, 요약 동시 검색.
+- **`GET /briefing`**:
+  - 최근 24시간(발행시각, 없으면 수집시각 기준) 동안의 `major_category = 'AI'` 기사 중 최대 5개를 반환합니다.
+  - 주제(`sub_category`)·출처 다양성을 우선하고 최신순으로 선정하며, 기사 필드는 `/articles`와 같은 번역 우선 규칙을 따릅니다.
+  - 응답: `generated_at`, `window_start`, `window_end`, `selection_method`, `articles`.
+
+---
+
+## 7. 시작하기 (설치 및 실행 방법)
+
+### 7.1 사전 준비
+
+- Python 3(3.14에서 테스트 확인), Node.js(npm), Windows PowerShell(통합 실행 시)
+- `news-crawling/.env`에 `GEMINI_API_KEY=<발급받은 키>` 설정 (환경 변수로도 지정 가능, Git에 커밋 금지)
+
+### 7.2 서브시스템별 실행
+
+```bash
+# 수집·번역 파이프라인 (news-crawling/)
+python -m pip install -r requirements.txt
+python main.py --run        # 1회 즉시 실행
+python main.py --schedule   # 매일 01:00 KST 스케줄 실행
+
+# 백엔드 API (news-viewer/backend/) → http://localhost:8000/docs
+python -m pip install -r requirements.txt
+uvicorn main:app --reload
+
+# 프론트엔드 (news-viewer/frontend/) → http://localhost:5173
+npm install
+npm run dev
+```
+
+### 7.3 통합 실행 (Windows)
+
+저장소 루트에서 `.\start.ps1`을 실행하면 백엔드(8000)와 프론트엔드(5173)가 각각 새 창에서 시작됩니다. `-Crawl` 옵션을 붙이면 수집 파이프라인도 1회 실행합니다.
+
+- 백엔드는 `news-viewer/backend/.venv`, 크롤러는 `news-crawling/venv`(없으면 시스템 `python`)를 사용하므로 미리 가상환경을 만들어 둡니다.
+
+### 7.4 테스트
+
+```bash
+# 수집·번역 파이프라인 (news-crawling/)
+python -m unittest discover -p "test_*.py" -v
+
+# 백엔드 (news-viewer/backend/)
+python -m unittest discover -p "test_*.py" -v
+
+# 프론트엔드 (news-viewer/frontend/)
+npm run build
+npm test
+node src/empty-state.test.mjs
+```
+
+---
+
+## 8. 최근 변경 이력
+
+### 2026-11-13
+
+| 이슈 | PR | 영역 | 내용 |
+|------|----|------|------|
+| #46 | #48 | 수집 파이프라인 | 번역 대기열이 실제 출처 문자열 `네이버뉴스`를 한국어 출처로 인식하지 못해 한국어 기사를 번역하며 Gemini 무료 한도를 낭비하던 문제 수정. 테스트 데이터를 실제 출처 문자열로 교체하고 회귀 테스트 추가 |
+| #47 | #49 | 백엔드 | `translation_status` 판별이 `naver`, `geeknews`만 비교해 `네이버뉴스`·`GeekNews` 기사가 계속 `pending`으로 표시되던 문제 수정. 한국어 출처 목록을 `KOREAN_SOURCES` 상수로 단일화 |
+| #22 | #50 | 프론트엔드 | 밝은 중립 배경과 녹색 강조의 뉴스 리더 UI로 개편. 출처 배지, 사이드바 기사 수 배지, 키보드 포커스 링 추가, 검색 제출을 `<form onSubmit>`으로 단일화. 기존 브리핑·필터·페이지네이션·Markdown 본문·모바일 전환 동작 유지 |
+| #51 | #52 | 문서 | README에 위 변경 사항, `GET /briefing` API 계약, 실행·테스트 방법, 알려진 문제 반영 |
+
+---
+
+## 9. 알려진 문제 및 향후 과제
+
+2026-11-13 코드 검토에서 확인된 미해결 항목입니다.
+
+- **GitHub Trending 기사 반복 재번역**: 본문에 매일 바뀌는 스타 수(`Total Stars`, `Recent Stars`)가 포함되어 재수집 시 원문 해시가 바뀝니다. 그 결과 같은 저장소가 매일 다시 번역 대기열에 들어가 무료 한도를 소모하고, 재번역 전까지 원문이 노출됩니다.
+- **요약·분류 단계 미실행**: 무료 한도를 번역에 집중하기 위해 `summarize`·`classify` 호출을 제외했기 때문에, 카테고리를 넣지 않는 네이버 기사는 카테고리 필터에 나타나지 않고 요약도 생성되지 않습니다. 브리핑의 주제 다양성도 `sub_category`를 넣는 일부 출처(dev.to, GitHub Trending, Reddit AI)에만 적용됩니다.
+- **브리핑의 분석 결과 미사용**: `/articles`, `/categories`는 `article_analysis` 값을 우선하지만 `/briefing`은 `articles.major_category`만 사용해 화면별 분류가 다를 수 있습니다.
+- **시간대 해석 불일치**: 시간대 정보가 없는 시각을 백엔드는 한국 시간으로, 번역 대기열 정렬은 UTC로 해석합니다.
+- **조회 성능**: 목록·상세·브리핑 조회마다 모든 행의 원문 해시를 계산해 번역 테이블과 조인하고, 브리핑은 전체 AI 기사를 읽은 뒤 Python에서 24시간 범위를 거릅니다. 기사가 늘어나면 응답이 느려질 수 있습니다.
+- **개발 환경 정리**: `start.ps1`의 가상환경 경로 규칙이 백엔드(`.venv`)와 크롤러(`venv`)에서 다르고, 프론트엔드 `src/`에 사용하지 않는 Vite 템플릿 파일(`main.js`, `counter.js`, `style.css` 등)이 남아 있습니다.
