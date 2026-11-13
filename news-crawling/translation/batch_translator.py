@@ -1,10 +1,13 @@
 import json
 import logging
 import re
-from typing import Any
+import time
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 from google.genai import types
 
+import db
 from config import GEMINI_MODEL, MIN_TRANSLATION_RATIO
 from translation import translator
 from translation.translator import TRANSLATION_SYSTEM_INSTRUCTION
@@ -100,6 +103,10 @@ def call_gemini_batch(batch: list[dict], model: str = GEMINI_MODEL) -> str:
     )
     try:
         client = translator.get_gemini_client()
+    except ValueError as e:
+        logger.error("Gemini 클라이언트 생성 실패 (API 키 확인 필요): %s", e)
+        raise PermanentApiError(str(e)) from e
+    try:
         response = client.models.generate_content(model=model, contents=contents, config=config)
         return response.text or ""
     except Exception as e:
@@ -175,8 +182,110 @@ def parse_batch_response(raw: str, batch: list[dict]) -> dict[int, dict]:
         if problem:
             logger.warning("번역 검증 실패로 제외 (기사 ID: %d): %s", article_id, problem)
             continue
+        content = item.get("content")
         result[article_id] = {
             "title": item["title"].strip(),
-            "content": item.get("content") or "",
+            "content": content if isinstance(content, str) else "",
         }
     return result
+
+
+MAX_MINUTE_WAIT_SECONDS = 60
+
+
+@dataclass
+class BatchOutcome:
+    completed_ids: list[int] = field(default_factory=list)
+    pending_ids: list[int] = field(default_factory=list)  # 상태 변경 없이 다음 실행으로 넘김
+    failed_ids: list[int] = field(default_factory=list)  # fail_article_translation 기록됨
+    stop_reason: Optional[str] = None  # None | "daily_quota" | "permanent_error"
+
+
+def _merge_outcomes(first: BatchOutcome, second: BatchOutcome) -> BatchOutcome:
+    return BatchOutcome(
+        completed_ids=first.completed_ids + second.completed_ids,
+        pending_ids=first.pending_ids + second.pending_ids,
+        failed_ids=first.failed_ids + second.failed_ids,
+        stop_reason=first.stop_reason or second.stop_reason,
+    )
+
+
+def translate_batch(
+    batch: list[dict],
+    rate_limiter,
+    model: str = GEMINI_MODEL,
+    allow_split: bool = True,
+) -> BatchOutcome:
+    """기사 묶음을 한 번의 Gemini 요청으로 번역해 DB에 저장한다."""
+    outcome = BatchOutcome()
+    todo: list[dict] = []
+    for job in batch:
+        row = db.get_or_create_translation(job["article_id"], job["content_hash"])
+        if row.get("status") == "completed":
+            outcome.completed_ids.append(job["article_id"])
+        else:
+            todo.append(job)
+    if not todo:
+        return outcome
+
+    todo_ids = [job["article_id"] for job in todo]
+    tokens = sum(len(job.get("title") or "") + len(job.get("content") or "") for job in todo)
+    results: dict[int, dict] = {}
+
+    for attempt in range(2):
+        # 재시도를 포함해 Gemini 호출 1회마다 요청 1회를 소비한다.
+        if not rate_limiter.wait_and_consume(tokens=tokens, requests=1):
+            logger.warning("일일 요청 한도로 묶음 번역을 중단합니다. (기사 %d건 보류)", len(todo_ids))
+            outcome.pending_ids.extend(todo_ids)
+            outcome.stop_reason = "daily_quota"
+            return outcome
+        try:
+            raw = call_gemini_batch(todo, model=model)
+            results = parse_batch_response(raw, todo)
+            break
+        except DailyQuotaExceeded:
+            logger.warning("Gemini 일일 한도 소진: 묶음 번역을 중단합니다. (기사 %d건 보류)", len(todo_ids))
+            outcome.pending_ids.extend(todo_ids)
+            outcome.stop_reason = "daily_quota"
+            return outcome
+        except MinuteRateLimited as e:
+            if attempt == 0:
+                wait = min(e.retry_seconds, MAX_MINUTE_WAIT_SECONDS)
+                logger.warning("분당 한도/일시 오류: %s초 대기 후 1회 재시도합니다.", wait)
+                time.sleep(wait)
+                continue
+            logger.warning("재시도 후에도 분당 한도/일시 오류가 계속되어 %d건을 보류합니다.", len(todo_ids))
+            outcome.pending_ids.extend(todo_ids)
+            return outcome
+        except PermanentApiError as e:
+            logger.error("묶음 번역 영구 오류: %s", e)
+            for article_id, job in zip(todo_ids, todo):
+                db.fail_article_translation(article_id, job["content_hash"], f"묶음 번역 실패: {e}")
+            outcome.failed_ids.extend(todo_ids)
+            outcome.stop_reason = "permanent_error"
+            return outcome
+        except BatchParseError as e:
+            if allow_split and len(todo) >= 2:
+                logger.warning("묶음 응답 파싱 실패(%s): 절반으로 나누어 재시도합니다.", e)
+                mid = len(todo) // 2
+                first = translate_batch(todo[:mid], rate_limiter, model, allow_split=False)
+                if first.stop_reason:
+                    rest = BatchOutcome(pending_ids=[j["article_id"] for j in todo[mid:]])
+                else:
+                    rest = translate_batch(todo[mid:], rate_limiter, model, allow_split=False)
+                merged = _merge_outcomes(first, rest)
+                return _merge_outcomes(outcome, merged)
+            logger.warning("묶음 응답 파싱 실패(%s): %d건을 보류합니다.", e, len(todo_ids))
+            outcome.pending_ids.extend(todo_ids)
+            return outcome
+
+    for job in todo:
+        article_id = job["article_id"]
+        result = results.get(article_id)
+        if result and db.complete_article_translation(
+            article_id, job["content_hash"], result["title"], result["content"], model
+        ):
+            outcome.completed_ids.append(article_id)
+        else:
+            outcome.pending_ids.append(article_id)
+    return outcome
