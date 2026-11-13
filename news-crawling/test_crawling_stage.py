@@ -1,8 +1,8 @@
 import os
 import sqlite3
+import sys
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
 
 import db
 import main
@@ -99,12 +99,11 @@ class TestCrawlingStage(unittest.TestCase):
             "published_at": "2026-11-12T00:00:00Z",
             "crawled_at": "2026-11-12T01:00:00",
         }]
-        with patch("llm.analyzer.summarize", create=True) as mock_sum, \
-             patch("llm.analyzer.classify", create=True) as mock_cls:
-            saved, refreshed, failed, new_ids = main.crawl_and_save_articles(sample)
-            self.assertEqual(saved, 1)
-            mock_sum.assert_not_called()
-            mock_cls.assert_not_called()
+        saved, refreshed, failed, new_ids = main.crawl_and_save_articles(sample)
+        self.assertEqual(saved, 1)
+        # 요약·분류용 llm 모듈은 제거되었으며, 수집 단계에서 다시 불러오지 않아야 한다.
+        self.assertNotIn("llm", sys.modules)
+        self.assertNotIn("llm.analyzer", sys.modules)
 
 
 if __name__ == "__main__":
