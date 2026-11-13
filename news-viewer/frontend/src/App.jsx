@@ -5,13 +5,13 @@ import { articleReducer, initialArticleState } from "./articleState.js";
 const API = "/api";
 const COMPACT_QUERY = "(max-width: 1023px)";
 
-const ACCENT = "#7c3aed";
-const ACCENT_LIGHT = "#ede9fe";
-const ACCENT_MID = "#8b5cf6";
-const ACCENT_DARK = "#5b21b6";
-const BORDER = "#e5e7eb";
-const TEXT_SECONDARY = "#4b5563";
-const TEXT_MUTED = "#52525b";
+const ACCENT = "#258347";
+const ACCENT_LIGHT = "#edf5ef";
+const ACCENT_MID = "#3d8b56";
+const ACCENT_DARK = "#1e6837";
+const BORDER = "#e4e8e4";
+const TEXT_SECONDARY = "#4a574e";
+const TEXT_MUTED = "#525e55";
 const SOURCE_FILTERS = [
   "네이버뉴스",
   "Google News",
@@ -22,6 +22,50 @@ const SOURCE_FILTERS = [
   "arXiv",
   "dev.to",
 ];
+
+const SOURCE_MARKS = {
+  "네이버뉴스": ["N", "#1b874b", "#edf7ef"],
+  "Google News": ["G", "#34629e", "#edf3fc"],
+  GeekNews: ["GN", "#9e5c2c", "#fcf3ec"],
+  "Reddit AI": ["R", "#b35732", "#fcf1ec"],
+  "GitHub Trending": ["GH", "#36413a", "#edf1ee"],
+  "Hugging Face": ["HF", "#8a6a20", "#fdf8e8"],
+  arXiv: ["aX", "#9c4040", "#fdf0f0"],
+  "dev.to": ["d", "#3f4c45", "#edf1ee"],
+};
+
+function SourceMark({ source, size = 18 }) {
+  const [label, color, background] = SOURCE_MARKS[source] || [source?.slice(0, 2) || "뉴스", "#455348", "#edf1ee"];
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: size,
+        height: size,
+        borderRadius: 4,
+        fontSize: size <= 18 ? 9 : 10,
+        lineHeight: 1,
+        fontWeight: 700,
+        color,
+        background,
+        flexShrink: 0,
+        letterSpacing: "-0.3px",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
+  return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "short", day: "numeric" }).format(date);
+}
 
 async function fetchJSON(path, signal) {
   const response = await fetch(`${API}${path}`, { signal });
@@ -34,64 +78,97 @@ const s = {
     display: "flex",
     height: "100dvh",
     overflow: "hidden",
-    background: "#f8fafc",
+    background: "#ffffff",
   },
   sidebar: {
     width: 240,
-    background: "#ffffff",
+    background: "#f7f9f7",
     borderRight: `1px solid ${BORDER}`,
     display: "flex",
     flexDirection: "column",
     flexShrink: 0,
   },
   sidebarHeader: {
-    padding: "20px 20px 16px",
+    padding: "20px 18px 16px",
     borderBottom: `1px solid ${BORDER}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sidebarBrand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+  sidebarBrandIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    background: ACCENT,
+    color: "#ffffff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 750,
+    fontSize: 16,
+    flexShrink: 0,
   },
   sidebarTitle: {
-    fontSize: 18,
-    fontWeight: 700,
-    color: ACCENT,
-    letterSpacing: "-0.3px",
+    fontSize: 17,
+    fontWeight: 750,
+    color: "#16241a",
+    letterSpacing: "-0.4px",
+    lineHeight: 1.25,
   },
   sidebarSubtitle: {
     fontSize: 11,
     color: TEXT_MUTED,
     marginTop: 2,
+    fontWeight: 500,
   },
   sidebarScroll: {
     flex: 1,
+    minHeight: 0,
     overflowY: "auto",
-    padding: "16px 12px",
+    padding: "14px 10px 18px",
   },
   sectionLabel: {
     fontSize: 11,
-    fontWeight: 600,
+    fontWeight: 700,
     color: TEXT_MUTED,
     textTransform: "uppercase",
     letterSpacing: "0.6px",
-    padding: "0 8px",
+    padding: "0 10px",
     marginBottom: 6,
-    marginTop: 16,
+    marginTop: 18,
   },
   filterItem: (active) => ({
-    padding: "7px 10px",
-    borderRadius: 8,
+    width: "100%",
+    minHeight: 44,
+    padding: "8px 12px",
+    borderRadius: 7,
+    border: "none",
     cursor: "pointer",
     marginBottom: 2,
     background: active ? ACCENT_LIGHT : "transparent",
-    color: active ? ACCENT : "#374151",
-    fontWeight: active ? 600 : 400,
-    fontSize: 14,
+    color: active ? ACCENT_DARK : "#334136",
+    fontWeight: active ? 650 : 450,
+    fontSize: 13.5,
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    transition: "background 0.15s",
+    transition: "background 0.15s, color 0.15s",
+    fontFamily: "inherit",
+    textAlign: "left",
   }),
   filterCount: (active) => ({
     fontSize: 11,
     color: active ? ACCENT_DARK : TEXT_MUTED,
     fontWeight: 500,
+    fontVariantNumeric: "tabular-nums",
+    background: active ? "#d7eadb" : "#edf2ee",
+    padding: "2px 7px",
+    borderRadius: 10,
   }),
   main: {
     flex: 1,
@@ -100,36 +177,60 @@ const s = {
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
+    background: "#ffffff",
   },
   topbar: {
-    padding: "14px 20px",
+    minHeight: 64,
+    padding: "12px 24px",
     borderBottom: `1px solid ${BORDER}`,
     background: "#ffffff",
     display: "flex",
-    gap: 10,
+    justifyContent: "space-between",
+    gap: 16,
     alignItems: "center",
+    flexShrink: 0,
+  },
+  topbarTitle: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: "#334136",
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    whiteSpace: "nowrap",
+  },
+  searchForm: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flex: "0 1 380px",
+    maxWidth: "100%",
   },
   searchInput: {
     flex: 1,
     minWidth: 0,
     padding: "9px 14px",
-    borderRadius: 10,
-    border: `1.5px solid ${BORDER}`,
-    fontSize: 16,
-    background: "#f9fafb",
-    transition: "border-color 0.15s",
+    borderRadius: 8,
+    border: `1px solid ${BORDER}`,
+    fontSize: 14,
+    background: "#f8faf8",
+    color: "#16241a",
+    transition: "border-color 0.15s, background-color 0.15s",
+    fontFamily: "inherit",
   },
   searchBtn: {
-    padding: "9px 20px",
-    borderRadius: 10,
+    padding: "9px 18px",
+    borderRadius: 8,
     background: ACCENT,
-    color: "#fff",
+    color: "#ffffff",
     border: "none",
     cursor: "pointer",
-    fontSize: 14,
-    fontWeight: 600,
-    letterSpacing: "0.2px",
+    fontSize: 13,
+    fontWeight: 650,
+    letterSpacing: "0.1px",
     flexShrink: 0,
+    transition: "background 0.15s",
+    fontFamily: "inherit",
   },
   content: {
     flex: 1,
@@ -138,30 +239,30 @@ const s = {
     overflow: "hidden",
   },
   listPanel: {
-    flex: "0 1 400px",
-    minWidth: 280,
+    flex: "0 0 clamp(340px, 32vw, 480px)",
+    minWidth: 320,
     overflowY: "auto",
     borderRight: `1px solid ${BORDER}`,
-    background: "#f8fafc",
-    padding: "12px 12px",
+    background: "#ffffff",
+    padding: 0,
   },
   activeFilterBar: {
     display: "flex",
     alignItems: "center",
     flexWrap: "wrap",
     gap: 8,
-    padding: "8px 12px",
-    marginBottom: 10,
-    background: "#ffffff",
-    borderRadius: 10,
-    border: `1px solid ${BORDER}`,
-    maxWidth: "100%",
+    padding: "10px 14px",
+    margin: "12px 14px",
+    background: "#f6f9f6",
+    borderRadius: 8,
+    border: "1px solid #dbe6dc",
+    maxWidth: "calc(100% - 28px)",
     boxSizing: "border-box",
   },
   activeFilterLabel: {
     fontSize: 12,
-    fontWeight: 600,
-    color: "#374151",
+    fontWeight: 650,
+    color: "#28382c",
     marginRight: 2,
   },
   activeFilterChip: {
@@ -169,14 +270,14 @@ const s = {
     alignItems: "center",
     gap: 6,
     minHeight: 44,
-    padding: "8px 12px",
+    padding: "6px 12px",
     boxSizing: "border-box",
-    borderRadius: 22,
+    borderRadius: 20,
     background: ACCENT_LIGHT,
-    color: ACCENT,
-    border: "none",
-    fontSize: 13,
-    fontWeight: 500,
+    color: ACCENT_DARK,
+    border: "1px solid #cce2d0",
+    fontSize: 12.5,
+    fontWeight: 550,
     cursor: "pointer",
     fontFamily: "inherit",
   },
@@ -191,9 +292,9 @@ const s = {
     alignItems: "center",
     justifyContent: "center",
     minHeight: 44,
-    padding: "8px 10px",
+    padding: "6px 10px",
     boxSizing: "border-box",
-    borderRadius: 8,
+    borderRadius: 6,
     background: "transparent",
     color: TEXT_SECONDARY,
     border: "none",
@@ -209,84 +310,100 @@ const s = {
     textAlign: "left",
     fontFamily: "inherit",
     overflowWrap: "anywhere",
-    padding: "14px 16px",
-    borderRadius: 12,
-    marginBottom: 8,
+    padding: "16px 20px 15px",
     cursor: "pointer",
-    background: selected ? "#ffffff" : "#ffffff",
-    border: `1.5px solid ${selected ? ACCENT : BORDER}`,
-    boxShadow: selected
-      ? `0 0 0 3px ${ACCENT_LIGHT}`
-      : "0 1px 3px rgba(0,0,0,0.05)",
-    transition: "border-color 0.15s, box-shadow 0.15s",
+    background: selected ? "#edf5ef" : "#ffffff",
+    border: "none",
+    borderBottom: `1px solid ${BORDER}`,
+    borderLeft: selected ? `3px solid ${ACCENT}` : "3px solid transparent",
+    transition: "background 0.15s, border-left-color 0.15s",
+    display: "block",
   }),
   cardMeta: {
     fontSize: 12,
-    color: ACCENT,
+    color: TEXT_MUTED,
     fontWeight: 500,
-    marginBottom: 5,
+    marginBottom: 6,
     display: "flex",
-    gap: 6,
+    gap: 7,
     alignItems: "center",
+    flexWrap: "wrap",
+  },
+  cardSourceName: {
+    fontWeight: 650,
+    color: "#2a3d2e",
+  },
+  cardCategory: {
+    color: ACCENT_DARK,
+    fontWeight: 550,
+  },
+  cardDate: {
+    color: TEXT_MUTED,
   },
   cardDot: {
     width: 3,
     height: 3,
     borderRadius: "50%",
-    background: ACCENT_MID,
+    background: "#98a69a",
     flexShrink: 0,
   },
   cardTitle: {
-    fontSize: 14,
-    fontWeight: 600,
+    fontSize: 14.5,
+    fontWeight: 650,
     lineHeight: 1.45,
-    marginBottom: 7,
-    color: "#111827",
+    marginBottom: 6,
+    color: "#16241a",
   },
   cardSummary: {
     fontSize: 12.5,
     color: TEXT_SECONDARY,
-    lineHeight: 1.5,
+    lineHeight: 1.55,
     marginBottom: 8,
   },
   tagRow: {
     display: "flex",
-    gap: 4,
+    gap: 5,
     flexWrap: "wrap",
   },
   tag: {
     fontSize: 11,
-    background: ACCENT_LIGHT,
-    color: ACCENT,
-    padding: "2px 9px",
-    borderRadius: 20,
+    background: "#edf5ef",
+    color: ACCENT_DARK,
+    border: "1px solid #d5e5d8",
+    padding: "2px 8px",
+    borderRadius: 14,
     fontWeight: 500,
   },
   pagination: {
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    gap: 10,
-    padding: "16px 0 8px",
+    gap: 12,
+    padding: "16px 16px 20px",
+    borderTop: `1px solid ${BORDER}`,
+    background: "#ffffff",
   },
   pageBtn: (disabled) => ({
-    padding: "6px 16px",
-    borderRadius: 8,
-    border: `1.5px solid ${BORDER}`,
-    background: disabled ? "#f3f4f6" : "#ffffff",
-    color: disabled ? TEXT_MUTED : "#374151",
+    padding: "6px 14px",
+    borderRadius: 7,
+    border: `1px solid ${BORDER}`,
+    background: disabled ? "#f4f6f4" : "#ffffff",
+    color: disabled ? TEXT_MUTED : "#28382c",
     cursor: disabled ? "default" : "pointer",
-    fontSize: 13,
-    fontWeight: 500,
+    fontSize: 12.5,
+    fontWeight: 550,
+    fontFamily: "inherit",
+    transition: "background 0.15s, border-color 0.15s",
   }),
   pageInfo: {
-    fontSize: 13,
+    fontSize: 12.5,
     color: TEXT_MUTED,
     minWidth: 60,
     textAlign: "center",
+    fontVariantNumeric: "tabular-nums",
   },
   readerContainer: {
-    maxWidth: 820,
+    maxWidth: 780,
     width: "100%",
     margin: "0 auto",
     overflowWrap: "anywhere",
@@ -296,7 +413,7 @@ const s = {
     flex: 1,
     minWidth: 0,
     overflowY: "auto",
-    padding: "28px 32px",
+    padding: "36px 44px",
     background: "#ffffff",
   },
   detailEmpty: {
@@ -305,64 +422,70 @@ const s = {
     alignItems: "center",
     justifyContent: "center",
     color: TEXT_MUTED,
+    textAlign: "center",
+    padding: "32px",
   },
   detailMeta: {
     display: "flex",
     gap: 8,
     alignItems: "center",
     fontSize: 13,
-    color: ACCENT,
+    color: ACCENT_DARK,
     fontWeight: 600,
-    marginBottom: 10,
+    marginBottom: 12,
     flexWrap: "wrap",
   },
   detailTitle: {
-    fontSize: 26,
-    fontWeight: 700,
+    fontSize: 25,
+    fontWeight: 750,
     lineHeight: 1.35,
     marginBottom: 14,
-    color: "#0f172a",
+    color: "#142217",
     letterSpacing: "-0.02em",
     overflowWrap: "anywhere",
     wordBreak: "break-word",
   },
   detailDate: {
-    fontSize: 12,
+    fontSize: 12.5,
     color: TEXT_MUTED,
-    marginBottom: 20,
+    marginBottom: 24,
     display: "flex",
     gap: 8,
+    alignItems: "center",
   },
   detailLink: {
-    color: ACCENT,
+    color: ACCENT_DARK,
     textDecoration: "none",
-    fontWeight: 500,
+    fontWeight: 550,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 3,
   },
   summaryBox: {
-    background: "#f5f3ff",
-    border: `1px solid #ddd6fe`,
+    background: "#f4f8f4",
+    border: "1px solid #d5e5d8",
     borderLeft: `4px solid ${ACCENT}`,
-    borderRadius: 10,
+    borderRadius: 8,
     padding: "16px 20px",
     marginBottom: 28,
   },
   summaryLabel: {
     fontSize: 11,
     fontWeight: 700,
-    color: ACCENT,
+    color: ACCENT_DARK,
     textTransform: "uppercase",
     letterSpacing: "0.6px",
     marginBottom: 8,
   },
   summaryText: {
-    fontSize: 15,
+    fontSize: 14.5,
     lineHeight: 1.75,
-    color: "#374151",
+    color: "#28382c",
   },
   detailContent: {
     fontSize: 17,
     lineHeight: 1.82,
-    color: "#374151",
+    color: "#28382c",
     whiteSpace: "pre-wrap",
     marginBottom: 32,
     overflowWrap: "anywhere",
@@ -371,27 +494,29 @@ const s = {
   statusText: {
     textAlign: "center",
     color: TEXT_MUTED,
-    padding: "40px 0",
-    fontSize: 14,
+    padding: "40px 16px",
+    fontSize: 13.5,
   },
   briefingHeader: {
-    padding: "20px 16px",
+    padding: "24px 20px 20px",
     borderBottom: `1px solid ${BORDER}`,
-    background: ACCENT_LIGHT,
+    background: "#f4f8f4",
   },
   briefingTitle: {
     margin: "0 0 8px",
-    fontSize: 20,
-    color: "#0f172a",
+    fontSize: 19,
+    fontWeight: 750,
+    color: "#16241a",
+    letterSpacing: "-0.3px",
   },
   briefingDescription: {
-    margin: "0 0 10px",
-    fontSize: 13,
+    margin: "0 0 8px",
+    fontSize: 12.5,
     lineHeight: 1.6,
     color: TEXT_SECONDARY,
   },
   emptyState: {
-    padding: "48px 16px",
+    padding: "48px 20px",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -401,38 +526,39 @@ const s = {
   emptyIcon: {
     fontSize: 32,
     marginBottom: 12,
-    opacity: 0.6,
+    opacity: 0.7,
   },
   emptyTitle: {
     fontSize: 15,
-    fontWeight: 600,
-    color: "#1f2937",
+    fontWeight: 650,
+    color: "#16241a",
     marginBottom: 6,
     letterSpacing: "-0.2px",
   },
   emptyDesc: {
     fontSize: 13,
-    color: "#4b5563",
+    color: TEXT_SECONDARY,
     lineHeight: 1.5,
-    maxWidth: 260,
+    maxWidth: 280,
     marginBottom: 18,
   },
   resetBtn: {
-    padding: "8px 16px",
-    borderRadius: 8,
-    border: `1.5px solid ${BORDER}`,
+    padding: "8px 18px",
+    borderRadius: 7,
+    border: `1px solid ${BORDER}`,
     background: "#ffffff",
-    color: ACCENT,
+    color: ACCENT_DARK,
     fontSize: 13,
     fontWeight: 600,
     cursor: "pointer",
     transition: "background 0.15s, border-color 0.15s",
+    fontFamily: "inherit",
   },
   compactLayout: { flexDirection: "column" },
   compactSidebar: { width: "100%", flexShrink: 0, borderRight: "none", borderBottom: `1px solid ${BORDER}` },
   compactHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 16px", borderBottom: "none" },
-  compactFilters: { maxHeight: "40dvh", padding: "0 12px 12px" },
-  compactTopbar: { padding: "10px 12px", gap: 8 },
+  compactFilters: { maxHeight: "40dvh", padding: "0 12px 14px" },
+  compactTopbar: { padding: "10px 14px", gap: 8 },
   compactReadingHeader: {
     display: "flex",
     alignItems: "center",
@@ -447,15 +573,27 @@ const s = {
   compactReadingMeta: {
     fontSize: 13,
     color: TEXT_SECONDARY,
-    fontWeight: 500,
+    fontWeight: 550,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
   compactList: { width: "100%", minWidth: 0, flex: 1, borderRight: "none" },
   compactDetail: { width: "100%", padding: "20px 16px", flex: 1 },
-  compactDetailTitle: { fontSize: 22, lineHeight: 1.35 },
-  filterButton: { minHeight: 44, padding: "8px 12px", border: `1px solid ${BORDER}`, borderRadius: 8, background: "#fff", color: ACCENT, font: "inherit", cursor: "pointer", flexShrink: 0 },
+  compactDetailTitle: { fontSize: 21, lineHeight: 1.35 },
+  filterButton: {
+    minHeight: 44,
+    padding: "8px 14px",
+    border: `1px solid ${BORDER}`,
+    borderRadius: 7,
+    background: "#ffffff",
+    color: ACCENT_DARK,
+    font: "inherit",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    flexShrink: 0,
+  },
   filterControl: { width: "100%", minHeight: 44, border: "none", fontFamily: "inherit", textAlign: "left" },
   touchButton: { minHeight: 44 },
   backButton: {
@@ -463,12 +601,12 @@ const s = {
     minWidth: 44,
     padding: "8px 14px",
     border: `1px solid ${BORDER}`,
-    borderRadius: 8,
+    borderRadius: 7,
     background: "#ffffff",
-    color: ACCENT,
+    color: ACCENT_DARK,
     font: "inherit",
-    fontSize: 14,
-    fontWeight: 600,
+    fontSize: 13.5,
+    fontWeight: 650,
     cursor: "pointer",
     display: "inline-flex",
     alignItems: "center",
@@ -476,7 +614,7 @@ const s = {
     gap: 6,
     flexShrink: 0,
   },
-  error: { padding: "12px 16px", color: "#991b1b", background: "#fef2f2", fontSize: 14, flexShrink: 0 },
+  error: { padding: "12px 16px", color: "#991b1b", background: "#fef2f2", fontSize: 13.5, flexShrink: 0, borderBottom: "1px solid #fee2e2" },
 };
 
 export default function App() {
@@ -731,9 +869,12 @@ export default function App() {
       {/* Sidebar */}
       <aside style={{ ...s.sidebar, ...(isCompact ? s.compactSidebar : {}) }}>
         <div style={{ ...s.sidebarHeader, ...(isCompact ? s.compactHeader : {}) }}>
-          <div>
-            <div style={s.sidebarTitle}>📰 뉴스 뷰어</div>
-            <div style={s.sidebarSubtitle}>크롤링 뉴스 모아보기</div>
+          <div style={s.sidebarBrand}>
+            <div style={s.sidebarBrandIcon}>📰</div>
+            <div>
+              <div style={s.sidebarTitle}>뉴스 뷰어</div>
+              <div style={s.sidebarSubtitle}>크롤링 뉴스 모아보기</div>
+            </div>
           </div>
           {isCompact && (
             <button
@@ -770,7 +911,7 @@ export default function App() {
             </button>
           ))}
 
-          <div style={{ ...s.sectionLabel, marginTop: 4 }}>카테고리</div>
+          <div style={{ ...s.sectionLabel, marginTop: 12 }}>카테고리</div>
           {categoryItems.map((c) => (
             <button
               type="button"
@@ -821,22 +962,36 @@ export default function App() {
 
         {/* Topbar */}
         <div style={{ ...s.topbar, ...(isCompact ? s.compactTopbar : {}), ...(isCompact && selected ? { display: "none" } : {}) }}>
-          <input
-            aria-label="기사 검색"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSearchSubmit(e);
-            }}
-            placeholder="기사 제목, 본문으로 검색..."
-            style={s.searchInput}
-          />
-          <button
-            onClick={handleSearchSubmit}
-            style={{ ...s.searchBtn, ...s.touchButton }}
-          >
-            검색
-          </button>
+          {!isCompact && (
+            <div style={s.topbarTitle}>
+              <span>{view === "briefing" ? "오늘의 AI 브리핑" : "기사 피드"}</span>
+              {view === "articles" && (selectedCategory || selectedSource) && (
+                <span style={{ fontSize: 12, color: TEXT_MUTED, fontWeight: 400 }}>
+                  {selectedCategory && `· ${selectedCategory}`}
+                  {selectedSource && `· ${selectedSource}`}
+                </span>
+              )}
+            </div>
+          )}
+          <form onSubmit={handleSearchSubmit} style={s.searchForm}>
+            <input
+              aria-label="기사 검색"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSearchSubmit(e);
+              }}
+              placeholder="기사 제목, 본문으로 검색..."
+              style={s.searchInput}
+            />
+            <button
+              type="submit"
+              onClick={handleSearchSubmit}
+              style={{ ...s.searchBtn, ...s.touchButton }}
+            >
+              검색
+            </button>
+          </form>
         </div>
 
         {((view === "articles" && error) || metadataError) && (
@@ -965,14 +1120,21 @@ export default function App() {
                   style={s.card(selected?.id === a.id)}
                 >
                   <div style={s.cardMeta}>
-                    <span>{a.source}</span>
+                    <SourceMark source={a.source} />
+                    <span style={s.cardSourceName}>{a.source}</span>
                     <span style={s.cardDot} />
-                    <span>{a.major_category}</span>
+                    <span style={s.cardCategory}>{a.major_category}</span>
+                    {a.published_at && (
+                      <>
+                        <span style={s.cardDot} />
+                        <span style={s.cardDate}>{formatDate(a.published_at)}</span>
+                      </>
+                    )}
                   </div>
                   <div style={s.cardTitle}>{a.title}</div>
                   {previewText && (
                     <div style={s.cardSummary}>
-                      {previewText.slice(0, 90)}{previewText.length > 90 ? "…" : ""}
+                      {previewText.slice(0, 95)}{previewText.length > 95 ? "…" : ""}
                     </div>
                   )}
                   {(a.tags || []).length > 0 && (
@@ -1039,6 +1201,7 @@ export default function App() {
             ) : (
               <div style={s.readerContainer}>
                 <div style={s.detailMeta}>
+                  <SourceMark source={selected.source} size={20} />
                   <span>{selected.source}</span>
                   <span>·</span>
                   <span>{selected.major_category}</span>
@@ -1051,7 +1214,7 @@ export default function App() {
                 </div>
                 <h1 style={{ ...s.detailTitle, ...(isCompact ? s.compactDetailTitle : {}) }}>{selected.title}</h1>
                 <div style={s.detailDate}>
-                  <span>{selected.published_at?.slice(0, 10)}</span>
+                  <span>{formatDate(selected.published_at) || selected.published_at?.slice(0, 10)}</span>
                   {selected.url && (
                     <>
                       <span>·</span>
