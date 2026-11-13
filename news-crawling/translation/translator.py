@@ -26,7 +26,7 @@ def get_gemini_client():
         if not api_key:
             raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다. .env 또는 환경 변수를 확인하세요.")
         from google import genai
-        _gemini_client = genai.Client(api_key=api_key)
+        _gemini_client = genai.Client(api_key=api_key, http_options={"api_version": "v1beta"})
     return _gemini_client
 
 

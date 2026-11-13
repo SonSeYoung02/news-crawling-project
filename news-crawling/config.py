@@ -26,7 +26,14 @@ REQUIRE_FREE_TIER = os.environ.get("REQUIRE_FREE_TIER", "true").lower() in ("tru
 # 무료 API 한도 통제 설정
 # 무료 티어 기준: RPM(분당 요청 수), RPD(일일 요청 수)
 GEMINI_RPM_LIMIT = int(os.environ.get("GEMINI_RPM_LIMIT", "10"))
-GEMINI_DAILY_LIMIT = int(os.environ.get("GEMINI_DAILY_LIMIT", "1000"))
+# gemini-2.5-flash 무료 RPD는 20 (2026-11 로그 기준)
+GEMINI_DAILY_LIMIT = int(os.environ.get("GEMINI_DAILY_LIMIT", "20"))
+# 묶음 번역: 요청 1회에 담을 최대 글자 수/기사 수
+BATCH_MAX_CHARS = int(os.environ.get("BATCH_MAX_CHARS", "12000"))
+BATCH_MAX_ARTICLES = int(os.environ.get("BATCH_MAX_ARTICLES", "10"))
+# 한국어 판별 비율 임계값, 번역문/원문 최소 길이 비율
+KOREAN_RATIO_THRESHOLD = float(os.environ.get("KOREAN_RATIO_THRESHOLD", "0.3"))
+MIN_TRANSLATION_RATIO = float(os.environ.get("MIN_TRANSLATION_RATIO", "0.3"))
 REQUEST_INTERVAL_SECONDS = float(os.environ.get("REQUEST_INTERVAL_SECONDS", "6.0"))
 
 # 새벽 스케줄 및 마감 설정 (KST 기준)
